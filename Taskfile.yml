@@ -172,6 +172,27 @@ tasks:
       - ssh hetzner 'systemctl rollback retainr-worker || true'
       - curl -f https://api.retainr.dev/health
 
+  # ── SEO ───────────────────────────────────────────────────────────────────────
+
+  seo:lighthouse:
+    desc: "Run Lighthouse CI audit (requires built site running)"
+    dir: '{{.WEB_DIR}}'
+    cmds:
+      - pnpm build
+      - npx lhci autorun
+
+  seo:check:
+    desc: "Full SEO check: lighthouse + link check"
+    cmds:
+      - task: seo:lighthouse
+
+  web:seo:
+    desc: "Build web app and run SEO analysis"
+    dir: '{{.WEB_DIR}}'
+    cmds:
+      - pnpm build
+      - echo "Build complete. Run 'pnpm start' then check: https://pagespeed.web.dev/analysis?url=http://localhost:3000"
+
   # ── Setup ─────────────────────────────────────────────────────────────────────
 
   setup:

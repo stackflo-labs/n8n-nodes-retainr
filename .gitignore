@@ -33,6 +33,12 @@ Thumbs.db
 .vscode/
 *.swp
 
+# Contentlayer
+.contentlayer/
+
+# Lighthouse CI
+.lighthouseci/
+
 # Logs
 *.log
 apps/worker/*.exe
