@@ -35,3 +35,5 @@ Thumbs.db
 
 # Logs
 *.log
+apps/worker/*.exe
+apps/api/*.exe
