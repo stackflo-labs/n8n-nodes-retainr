@@ -1,0 +1,161 @@
+---
+title: "How to Add Persistent Memory to Your Make.com AI Workflow"
+description: "Make.com AI scenarios forget everything between runs. This step-by-step guide shows you how to add persistent, searchable memory to any Make.com automation — no code required."
+publishedAt: "2026-02-22"
+author: "retainr team"
+tags: ["Make.com", "AI agents", "tutorial"]
+featured: true
+---
+
+Make.com is phenomenal for automation — visual, powerful, and fast to build. But when you wire up an OpenAI or Claude module, you hit the same wall as everyone else: **the AI has no memory.**
+
+Each scenario run is isolated. Your customer asks a question, you respond, they come back tomorrow — and the AI treats them as a complete stranger.
+
+This guide shows you how to solve that with retainr's Make.com module, adding persistent vector memory to any Make.com scenario in about 15 minutes.
+
+## The Problem in Plain Terms
+
+Make.com scenarios receive triggers, process data, and terminate. Any context you pass to an AI module exists only within that single scenario run.
+
+Common situations where this breaks:
+- **Customer support bots** — can't remember a user's history
+- **Sales AI assistants** — forget previous conversations entirely
+- **Content generation workflows** — can't maintain consistent style/context for a user
+- **Personal AI assistants** — start fresh with every new message
+
+The workaround most people try: dump everything into a Google Doc and send it to the AI every time. This works until the document grows large enough that you hit token limits — then it breaks completely.
+
+## A Better Approach: Semantic Memory Search
+
+Instead of loading *all* past context, the smarter approach is:
+
+1. Store each interaction as a memory
+2. When a new message arrives, **search** for relevant past context
+3. Inject only the top 3-5 relevant memories into your prompt
+
+This works because not all past context is relevant to the current question. Vector similarity search finds what's actually related — without reading the entire history.
+
+## Setting Up retainr in Make.com
+
+### Step 1: Install the retainr module
+
+Go to your Make.com workspace → Apps → search for "retainr" → Connect.
+
+Enter your API key from [retainr.dev/dashboard](/dashboard). The free tier gives you 1,000 memory operations — plenty to get started.
+
+### Step 2: Build the memory-enhanced scenario
+
+Here's the basic pattern for any AI chatbot scenario:
+
+**Incoming message** (webhook, email, Slack, whatever)
+↓
+**retainr: Search Memory** — finds relevant past context
+↓
+**OpenAI / Claude** — generates response with memory context
+↓
+**retainr: Store Memory** — saves this interaction
+↓
+**Send response** (back to webhook, email, Slack)
+
+### Step 3: Configure the Search Memory module
+
+In the retainr Search Memory module, configure:
+
+| Field | Value |
+|-------|-------|
+| Query | `{{1.message}}` (the incoming user message) |
+| User ID | `{{1.userId}}` (unique per user — email, phone, Slack ID) |
+| Limit | `5` |
+
+The module returns an array of relevant memories, scored by relevance.
+
+### Step 4: Build the AI prompt with memory injection
+
+In your OpenAI module, set the System Message to:
+
+```
+You are a helpful assistant.
+
+RELEVANT CONTEXT FROM PAST CONVERSATIONS:
+{{3.memories[].content | join("\n\n")}}
+
+Use this context to personalize your response. If no context is provided, respond normally.
+```
+
+The `{{3.memories[].content | join("\n\n")}}` syntax iterates your retainr results and formats them as text.
+
+### Step 5: Store the interaction
+
+After the AI responds, add a retainr Store Memory module:
+
+| Field | Value |
+|-------|-------|
+| Content | `User: {{1.message}} \n\nAssistant: {{4.choices[].message.content}}` |
+| User ID | `{{1.userId}}` |
+| Tags | `conversation, {{1.topic}}` |
+
+<Callout type="tip">
+Include both the user message AND the AI response in the stored content. This gives the search engine more signal when finding relevant memories later.
+</Callout>
+
+## Advanced Pattern: Long-Running Projects
+
+For workflows where you're managing ongoing projects (not just conversations), you can add metadata to memories:
+
+```json
+{
+  "content": "Client requested landing page redesign. Requirements: mobile-first, dark mode, conversion-focused. Budget: €2,000.",
+  "userId": "client-acme-corp",
+  "sessionId": "project-2026-q1",
+  "tags": ["project", "design", "requirements"]
+}
+```
+
+Then search by `sessionId` to find only memories from a specific project:
+
+```
+Search query: "design requirements budget"
+Session ID: "project-2026-q1"
+```
+
+This keeps client projects isolated even if you're managing dozens simultaneously.
+
+## Make.com-Specific Tips
+
+**Rate limiting**: If you're processing high volumes, add a sleep module between Store operations to stay within API limits.
+
+**Error handling**: Add an error handler route after the retainr modules. If memory retrieval fails, the scenario should still proceed with the AI — just without context. Never let memory failure break your core workflow.
+
+**Filtering by tags**: retainr supports tag-based filtering in search. Use tags to categorize memories (e.g., `billing`, `support`, `feature-request`) and filter to only relevant categories for each query type.
+
+## Measuring the Impact
+
+Track these metrics to see the difference memory makes:
+
+- **First-contact resolution rate** — did the AI resolve the issue without the user repeating themselves?
+- **Conversation length** — are conversations shorter because context is preserved?
+- **User satisfaction** — track via thumbs up/down after responses
+
+Most teams see 30-50% shorter conversations once memory is working well. Users don't have to re-explain their situation, and the AI can reference past interactions naturally.
+
+## What You Just Built
+
+Your Make.com AI scenario now:
+- Remembers every user it has spoken to
+- Finds semantically relevant past context (not just keyword matching)
+- Personalizes every response based on history
+- Scales to millions of memories without degrading performance
+
+And it runs entirely through Make.com modules — no custom code, no separate infrastructure to manage.
+
+<CTA text="Get your free retainr API key" href="/dashboard" />
+
+## Common Questions
+
+**How many memories can I store?** The free plan allows 1,000 memory operations. Builder (€29/mo) gives you 20,000. Pro (€79/mo) gives you 100,000.
+
+**Is memory per workspace or per user?** Per workspace (your API key), with user-level isolation via the `userId` field. All your users' memories are stored in one workspace but scoped so they can't access each other's data.
+
+**Can I delete memories?** Yes — the Delete Memory operation in the retainr module lets you filter by userId, sessionId, or tags, then delete matching memories.
+
+**What if the user asks about something private?** Memory is scoped by `userId`. User A can never see User B's memories. You control what gets stored — if content is sensitive, simply don't include it in the stored memory.

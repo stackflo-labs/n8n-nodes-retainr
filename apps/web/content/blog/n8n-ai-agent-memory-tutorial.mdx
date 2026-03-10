@@ -1,0 +1,310 @@
+---
+title: "n8n AI Agent Memory: Complete Step-by-Step Tutorial (2026)"
+description: "The definitive guide to adding persistent memory to n8n AI agents. Covers installation, setup, semantic search, user isolation, and production patterns. No code required."
+publishedAt: "2026-03-08"
+author: "retainr team"
+tags: ["n8n", "tutorial", "AI agents"]
+featured: false
+---
+
+This is the complete tutorial for n8n AI agent memory — from installing the community node to running a production AI agent that remembers thousands of users.
+
+If you want the quick version, see [Why n8n AI Agents Forget Everything](/blog/why-n8n-ai-agents-forget-everything). This tutorial goes deeper.
+
+## Prerequisites
+
+- n8n v1.0+ (cloud or self-hosted)
+- Community nodes enabled (Settings → Community Nodes → Enable)
+- A retainr API key ([get one free](/dashboard) — takes 30 seconds)
+- Basic familiarity with n8n workflows
+
+## Part 1: Installing the retainr Node
+
+### On n8n Cloud
+
+1. Open your n8n workspace
+2. Go to **Settings** (gear icon, bottom left)
+3. Select **Community Nodes**
+4. Click **Install a community node**
+5. Enter: `n8n-nodes-retainr`
+6. Click **Install**
+
+The node appears in your node list within 30 seconds.
+
+### On self-hosted n8n
+
+```bash
+cd /path/to/n8n
+npm install n8n-nodes-retainr
+# or
+pnpm add n8n-nodes-retainr
+```
+
+Restart n8n after installation.
+
+### Add your credentials
+
+1. In any workflow, add a **retainr** node
+2. In the Credentials dropdown, click **Create new**
+3. Enter your API key from [retainr.dev/dashboard](/dashboard)
+4. Click **Save** — credential is now reusable across all workflows
+
+## Part 2: Understanding Memory Types
+
+retainr supports two memory scoping patterns. Choose based on your use case:
+
+### User Memory (permanent)
+
+Memories scoped to a `user_id`. Persists forever (or until you delete it). Best for:
+- Customer service bots that remember users across months
+- Personal AI assistants that build user profiles over time
+- CRM enrichment that accumulates interaction history
+
+```json
+{
+  "content": "User mentioned they're a developer and prefer technical explanations",
+  "user_id": "user_alice@example.com"
+}
+```
+
+### Session Memory (temporary)
+
+Memories scoped to a `session_id`. Useful for:
+- Multi-step tasks where you want a clean slate per task
+- Workflow state management within a complex job
+- Temporary context that should expire
+
+```json
+{
+  "content": "Step 1 complete: scraped 150 product pages. Next: categorize by type.",
+  "user_id": "automation-job",
+  "session_id": "job-2026-03-08-001"
+}
+```
+
+Set `ttl_hours` to auto-expire session memories:
+```json
+{
+  "ttl_hours": 24
+}
+```
+
+## Part 3: Core Workflow Patterns
+
+### Pattern 1: Basic Conversational Agent
+
+The simplest memory pattern for any chat-style workflow:
+
+```
+Webhook (receives message + userId)
+↓
+retainr: Search Memory
+  └─ Query: {{$json.message}}
+  └─ User ID: {{$json.userId}}
+  └─ Limit: 5
+↓
+AI Agent
+  └─ System: "Context from past: {{$json.memories.map(m=>m.content).join('\n')}}"
+↓
+retainr: Store Memory
+  └─ Content: "User: {{$json.message}}\nAI: {{$json.response}}"
+  └─ User ID: {{$json.userId}}
+↓
+Respond to Webhook
+```
+
+### Pattern 2: Progressive User Profiling
+
+Build a user profile that grows richer over time:
+
+After each interaction, extract and store key facts separately:
+
+```
+AI Node (extract facts):
+  └─ "Extract any preferences, facts, or important context from this message.
+      Output as JSON: {facts: ['...', '...']}"
+↓
+Code Node (store each fact separately):
+  └─ for each fact, call retainr Store Memory
+  └─ Tag with "profile-fact"
+```
+
+Later, when building the prompt, search for `tags: ["profile-fact"]` to retrieve only profiling data, separate from conversation history.
+
+### Pattern 3: Long-Running Task State
+
+For multi-step jobs that span multiple workflow executions:
+
+```
+Trigger: New task created
+↓
+retainr: Store Memory
+  └─ Content: "Task started: [description]. Status: IN_PROGRESS"
+  └─ User ID: "task-runner"
+  └─ Session ID: {{$json.taskId}}
+
+... later, when task continues ...
+
+Trigger: Task continuation
+↓
+retainr: Search Memory
+  └─ Query: "task status progress"
+  └─ Session ID: {{$json.taskId}}
+↓
+AI decides next step based on what's been done
+↓
+retainr: Store Memory (update progress)
+  └─ Content: "Step 3 complete: [result]. Remaining: [steps]"
+```
+
+## Part 4: Advanced Configuration
+
+### Filtering memories by metadata
+
+When you have multiple memory types, search with filters to avoid noise:
+
+In the retainr node, use **Filters**:
+
+| Key | Operator | Value |
+|-----|----------|-------|
+| tag | contains | "billing" |
+
+Or filter by date — only memories from the last 30 days:
+
+| Key | Operator | Value |
+|-----|----------|-------|
+| created_after | date | `$now.minus(&#123;days: 30&#125;).toISO()` |
+
+### Bulk memory operations
+
+For onboarding workflows where you import existing customer history:
+
+Use the **HTTP Request** node to batch-store memories. The retainr API accepts individual POST requests — create a **Loop** node in n8n to iterate over historical records and store each one.
+
+### Memory cleanup
+
+Set up a scheduled workflow to clean up old session memories:
+
+```
+Cron trigger (weekly)
+↓
+retainr: Delete Memories
+  └─ Tag: "session"
+  └─ Created before: {{$now.minus({days: 30}).toISO()}}
+```
+
+## Part 5: Production Patterns
+
+### Always fail gracefully
+
+Wrap retainr nodes in an **Error Handler** sub-workflow. If memory retrieval fails, your main workflow should continue without context — not break entirely.
+
+```
+retainr: Search Memory
+  └─ On Error → Set default: { memories: [] }
+↓
+AI node runs with or without memories
+```
+
+### Async memory storage
+
+Don't block your response on memory storage. In n8n, you can use the **Execute Workflow** node to run memory storage asynchronously:
+
+```
+Send response to user
+↓ (parallel)
+Execute Workflow (async): "store-memory"
+  └─ Input: { content, userId, tags }
+```
+
+This shaves 50-100ms off your response time.
+
+### Monitor memory quality
+
+Add a weekly scheduled workflow that:
+1. Calls retainr **List Memories** with stats
+2. Checks memory count growth rate
+3. Alerts via Slack if growth is anomalous (possible data leak)
+
+## Part 6: Real Production Example — Support Ticket Handler
+
+Here's the complete n8n workflow JSON for a support ticket handler with memory. Import this directly into your n8n instance:
+
+The workflow handles:
+- Incoming support tickets via webhook
+- Semantic search for customer history
+- AI classification + response generation
+- Memory storage with categorization
+- Escalation routing
+
+**Trigger configuration:**
+```json
+{
+  "method": "POST",
+  "path": "/support-ticket",
+  "authentication": "headerAuth"
+}
+```
+
+**retainr Search Memory configuration:**
+```json
+{
+  "operation": "search",
+  "query": "={{ $json.message }}",
+  "userId": "={{ $json.customerEmail }}",
+  "limit": 5,
+  "filters": {
+    "tags": ["support"]
+  }
+}
+```
+
+**AI Agent system prompt:**
+```
+You are a support agent for [Company Name].
+
+CUSTOMER HISTORY (relevant past interactions):
+{{ $json.memories.map(m => `[${m.created_at.split('T')[0]}] ${m.content}`).join('\n') }}
+
+INSTRUCTIONS:
+- Reference past interactions when relevant
+- Don't repeat solutions that didn't work before (visible in history)
+- Classify urgency: LOW / MEDIUM / HIGH
+- End response with: URGENCY: [level]
+
+Respond professionally and concisely.
+```
+
+**retainr Store Memory configuration:**
+```json
+{
+  "operation": "store",
+  "content": "={{ 'Ticket: ' + $json.message + '\nResponse: ' + $json.aiResponse + '\nUrgency: ' + $json.urgency }}",
+  "userId": "={{ $json.customerEmail }}",
+  "tags": ["support", "={{ $json.urgency.toLowerCase() }}"]
+}
+```
+
+## Troubleshooting
+
+**"No memories returned"**: Check that you're using the same `user_id` in Search as you used in Store. User IDs are case-sensitive.
+
+**"Memory content too long"**: retainr has a 10,000 character limit per memory. Split long content into multiple memories with the same `session_id`.
+
+**"Search returning irrelevant results"**: The query quality matters. Use the actual user message as the query, not a summary. Natural language queries work best.
+
+**"Rate limit exceeded"**: You're exceeding your plan's ops/month. Upgrade to Builder or Pro, or reduce the number of memories stored per interaction.
+
+<CTA text="Install the n8n retainr node" href="/dashboard" />
+
+## Summary
+
+You now have everything needed to build production-grade n8n AI agents with persistent memory:
+
+- Install the community node and add credentials
+- Choose between user memory (permanent) and session memory (temporary)
+- Implement the search-before/store-after pattern
+- Handle failures gracefully
+- Monitor memory quality over time
+
+The n8n + retainr combination turns stateless automations into learning agents. Every interaction makes the next one better.
