@@ -1,0 +1,96 @@
+version: 2
+
+updates:
+  # Go API
+  - package-ecosystem: gomod
+    directory: /apps/api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies, auto-merge]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Go worker
+  - package-ecosystem: gomod
+    directory: /apps/worker
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies, auto-merge]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Web app (pnpm)
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 5
+    labels: [dependencies, auto-merge]
+    commit-message:
+      prefix: "chore(deps)"
+    # Never auto-update Next.js major — breaking changes require human review
+    ignore:
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+
+  # n8n node package
+  - package-ecosystem: npm
+    directory: /packages/n8n-node
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+    open-pull-requests-limit: 3
+    labels: [dependencies]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # Docker base images — Dependabot pins by digest and keeps them updated
+  - package-ecosystem: docker
+    directory: /apps/api
+    schedule:
+      interval: weekly
+      day: tuesday
+    labels: [dependencies]
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: docker
+    directory: /apps/worker
+    schedule:
+      interval: weekly
+      day: tuesday
+    labels: [dependencies]
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: docker
+    directory: /apps/web
+    schedule:
+      interval: weekly
+      day: tuesday
+    labels: [dependencies]
+    commit-message:
+      prefix: "chore(docker)"
+
+  # GitHub Actions versions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: tuesday
+    labels: [dependencies, auto-merge]
+    commit-message:
+      prefix: "chore(actions)"

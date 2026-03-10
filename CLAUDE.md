@@ -1,7 +1,7 @@
 # CLAUDE.md — retainr.dev Autonomous Operating Rules
 
-This file governs how Claude Code operates on this repository, both locally and on the Hetzner VPS.
-Claude Code is the autonomous operator of this business. Read this file before doing anything.
+This file governs how Claude Code operates on this repository.
+Claude Code runs **only** in GitHub Actions — never directly on the production VPS.
 
 ---
 
@@ -15,10 +15,57 @@ Owner contact (emergencies only): checked via `infra/ops/contact.txt` (not commi
 
 ---
 
+## Environments
+
+| Environment | URL | Branch | Managed by |
+|---|---|---|---|
+| Production | `retainr.dev`, `api.retainr.dev` | `main` | Dokploy (production compose app) |
+| Staging | `staging.retainr.dev`, `staging.api.retainr.dev` | `staging` | Dokploy (staging compose app) |
+
+Both environments run on the same Scaleway VPS. Dokploy + Traefik routes by hostname.
+Staging has its own isolated PostgreSQL database (`retainr_staging`).
+
+## Delivery Pipeline
+
+Every PR — whether from a human or from Claude — goes through the same pipeline:
+
+```
+PR opened/updated
+  → ci (tests + lint + build)
+  → staging-deploy (force-push HEAD to staging branch → Dokploy webhook → health poll)
+  → e2e (Playwright smoke tests against staging.retainr.dev + staging.api.retainr.dev)
+  → auto-merge (approve + squash merge — only for Claude-created PRs)
+  → production-deploy (Dokploy production webhook → health poll → rollback if failed)
+  → production smoke (web pages + API health only — no write ops in production)
+```
+
+All in `.github/workflows/pr-pipeline.yml` and `production-deploy.yml`.
+Claude-created branches must be prefixed `auto-fix/` or `claude/` to trigger auto-merge.
+
+## Where Claude Code Runs
+
+Claude Code operates **exclusively** through GitHub Actions, never directly on the VPS:
+
+| Trigger | Workflow | Purpose |
+|---|---|---|
+| `@claude` mention in issue/PR | `.github/workflows/claude.yml` | Interactive coding assistant |
+| `repository_dispatch: api-failure` | `.github/workflows/investigate.yml` | Auto-investigate + fix outages |
+| Weekly schedule (Sun 03:00 UTC) | `.github/workflows/security-audit.yml` | Dependency + code security audit |
+
+The VPS runs only two cron jobs:
+- `*/15 * * * *` — `health-check.sh`: detects failures, tries restart, then calls `repository_dispatch`
+- `0 2 * * *` — `backup.sh`: daily PostgreSQL backup to mounted volume
+
+**Never install Claude Code on the VPS.** The attack surface (prompt injection via logs, direct
+system access, no audit trail) is not acceptable. All AI-assisted work produces a PR, which is
+reviewable and reversible.
+
+---
+
 ## Absolute Rules (never violate)
 
-1. **Never break the API contract.** Existing fields on `/v1/memories` and `/v1/pdf/generate` are
-   immutable once shipped. Add fields, never remove or rename. Bump major version for breaking changes.
+1. **Never break the API contract.** Existing fields on `/v1/memories` are immutable once shipped.
+   Add fields, never remove or rename. Bump major version for breaking changes.
 
 2. **Never run migrations that drop columns or tables** without a backup verified in the same script.
    Always prefer additive migrations.
@@ -37,26 +84,33 @@ Owner contact (emergencies only): checked via `infra/ops/contact.txt` (not commi
 7. **Never delete customer data** outside of the explicit DELETE /v1/memories API path with verified
    workspace_id scoping. RLS is a safety net, not the primary guard.
 
+8. **Never use `--dangerously-skip-permissions`** in any automated workflow. This flag disables safety
+   guardrails and is prohibited in CI/CD.
+
 ---
 
 ## Self-Healing Workflow
 
-When triggered by cron or health check failure:
+When `investigate.yml` is triggered by a `repository_dispatch: api-failure` event:
 
 ```
-1. Read /var/log/retainr/api.log (last 200 lines)
+1. Read the log excerpt from github.event.client_payload (passed by health-check.sh)
 2. Identify error pattern (panic, DB timeout, OOM, bad deploy)
 3. Read relevant source files — understand before changing
-4. Write a fix
-5. Run: task test
-6. If tests pass: git add <specific files>, git commit, git push origin main
-7. Trigger deploy: task deploy:production
-8. Verify: curl https://api.retainr.dev/health → expect {"status":"ok"}
-9. If still broken after 2 attempts: write incident to docs/incidents/YYYY-MM-DD.md, stop
+4. Write a fix on a new branch: auto-fix/YYYY-MM-DD-<short-desc>
+5. Run: task test (in GitHub Actions environment)
+6. If tests pass: create a PR targeting main
+7. If tests fail after 2 attempts: create a GitHub issue instead, stop
+8. Always write docs/incidents/YYYY-MM-DD-<short-desc>.md
 ```
 
-**Do not retry the same fix more than twice.** If it fails twice, document it and halt —
-the owner will review. Brute-forcing broken state causes more damage.
+**Do not attempt more than 2 different fixes.** If both fail, create an issue and stop.
+PRs are the unit of change — every fix is reviewable before it hits `main`.
+
+**What Claude cannot do** from GitHub Actions (and should not try):
+- SSH into the VPS to restart services (health-check.sh handles that)
+- Access the live database directly
+- Read live log files in real-time (only the excerpt from the dispatch payload)
 
 ---
 
@@ -80,7 +134,7 @@ the owner will review. Brute-forcing broken state causes more damage.
 
 ### Database
 - Migrations: goose SQL files in `apps/api/internal/platform/migrate/`
-- Naming: `NNN_verb_noun.sql` (e.g., `002_add_pdf_jobs.sql`)
+- Naming: `NNN_verb_noun.sql` (e.g., `002_add_billing_events.sql`)
 - Every migration must be additive-safe or include explicit rollback plan in a comment
 - RLS policies must be verified with `EXPLAIN (ANALYZE, BUFFERS)` on the memories table when changed
 - pgvector HNSW index: do not change `m` or `ef_construction` without benchmarking first
@@ -103,34 +157,28 @@ Key tasks:
 - `task test` — all Go tests with race detector
 - `task db:generate` — regenerate sqlc types
 - `task lint` — golangci-lint + prettier
-- `task deploy:production` — build + rsync + restart on VPS
+- `task deploy:production` — build + rsync + restart on Scaleway VPS
+- `task env:sync:production` — push .env.production to GitHub Actions secrets/vars
+- `task tf:apply` — provision Scaleway infrastructure
 
 ---
 
 ## Production Deploy Process
 
-```bash
-task build:api
-task build:worker
-# rsync handled by task deploy:production
-# connects to hetzner alias in ~/.ssh/config
-ssh hetzner 'systemctl restart retainr-api retainr-worker'
-# health check
-curl -f https://api.retainr.dev/health
+Deploys happen via GitHub Actions (`deploy.yml`) on every push to `main`.
+Local deploy is available via `task deploy:production` (requires `~/.ssh/config` alias `retainr-vps`).
+
+```
+push to main
+  → test.yml runs (Go tests + lint + web build)
+  → deploy.yml runs on success
+      → build linux/amd64 binaries
+      → scp to VPS as *.new
+      → atomic swap + systemctl restart
+      → health check → rollback if failed
 ```
 
-If health check fails after deploy: `ssh hetzner 'systemctl rollback retainr-api'`
-
----
-
-## Cron Jobs (on VPS)
-
-| Schedule | Command | Purpose |
-|---|---|---|
-| `*/15 * * * *` | `/opt/retainr/scripts/health-check.sh` | Detect outages, trigger repair |
-| `0 3 * * 0` | `claude --dangerously-skip-permissions "Run security audit on retainr repo: check deps, scan for secrets, review error rates in logs from past week. Write findings to docs/audits/YYYY-MM-DD.md"` | Weekly security audit |
-| `0 9 1 * *` | `claude --dangerously-skip-permissions "Review embedding failure logs from past month. Update prompt in apps/api/internal/features/memory/store/command.go if failure rate > 5%. Run tests. Deploy if improved."` | Monthly self-improvement |
-| `0 2 * * *` | `/opt/retainr/scripts/backup.sh` | Daily PostgreSQL backup to Hetzner Volumes |
+If health check fails after deploy: `task deploy:rollback`
 
 ---
 
@@ -144,7 +192,7 @@ If health check fails after deploy: `ssh hetzner 'systemctl rollback retainr-api
 | `packages/n8n-node/` | n8n community node | API changes or bug fixes |
 | `infra/` | Docker, Caddy, deploy | Infrastructure changes |
 | `docs/` | All documentation | Always keep updated |
-| `.github/workflows/` | CI/CD | Pipeline changes |
+| `.github/workflows/` | CI/CD + Claude workflows | Pipeline changes |
 
 ---
 
@@ -160,9 +208,10 @@ When an incident occurs (service down, data issue, billing failure):
 
 ## Architecture Constraints (never redesign without owner approval)
 
-- Single Hetzner VPS (CX32) — no Kubernetes, no multi-region at MVP
+- Single Scaleway VPS (DEV1-S, fr-par-1) — no Kubernetes, no multi-region at MVP
 - PostgreSQL is the only datastore — no Redis, no external cache
 - Voyage AI for embeddings — abstracted behind `platform/embeddings` interface
 - Stripe for billing — no alternative payment processors
 - Resend for email — transactional only, no marketing campaigns without approval
 - No third-party analytics that send customer data off-VPS (GDPR)
+- Claude Code runs in GitHub Actions only — never on the VPS (security boundary)

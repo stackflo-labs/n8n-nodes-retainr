@@ -1,0 +1,88 @@
+name: Expand Test Coverage
+
+# After every merge to main, Claude checks whether new API routes or web pages
+# were added and expands products/retainr/web/e2e/smoke.spec.ts accordingly.
+#
+# Only creates a PR if it actually adds tests — skips silently otherwise.
+# The resulting PR goes through the full pipeline (staging → e2e → auto-merge).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Trigger when routes or pages change — not on every push
+      - 'products/retainr/api/internal/bootstrap/routes.go'
+      - 'products/retainr/api/internal/features/**/*.go'
+      - 'products/retainr/web/src/app/**/page.tsx'
+      - 'products/retainr/web/src/app/**/page.ts'
+
+jobs:
+  expand:
+    name: Auto-expand smoke test coverage
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # need HEAD~1 for diff
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - run: pnpm install
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Get changed files
+        id: diff
+        run: |
+          CHANGED=$(git diff HEAD~1 HEAD --name-only | tr '\n' ' ')
+          echo "files=$CHANGED" >> $GITHUB_OUTPUT
+          echo "Changed files: $CHANGED"
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 5 --model claude-sonnet-4-6"
+          prompt: |
+            ## Auto-expand smoke test coverage
+
+            The following files changed in the last commit to main:
+            `${{ steps.diff.outputs.files }}`
+
+            Your task:
+
+            1. Read `products/retainr/web/e2e/smoke.spec.ts` to understand the current test coverage.
+
+            2. For each changed file, determine if it adds new behaviour that lacks a test:
+               - **New API route** in `routes.go` or a new handler file → add an API smoke test
+               - **New web page** (`page.tsx`) → add a page-load test that checks the page title/h1 is visible
+               - **Modified existing handler** → check if the existing test still covers it
+
+            3. **Only add tests that are missing.** Do not modify existing tests.
+
+            4. If you add tests:
+               - Run `pnpm exec playwright test products/retainr/web/e2e/smoke.spec.ts --reporter=list` to verify they pass locally (they will fail against staging URL but should at least compile and not error on import)
+               - Create branch `claude/expand-tests-$(date +%Y%m%d)`
+               - Commit only `products/retainr/web/e2e/smoke.spec.ts`
+               - Open PR titled `test: expand smoke coverage` targeting `main`
+
+            5. If no tests are missing, **do nothing** — do not create a PR.
+
+            Keep tests focused: one `test()` per route/page, checking the most important assertion only.

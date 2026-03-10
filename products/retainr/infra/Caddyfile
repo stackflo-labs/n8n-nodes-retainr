@@ -1,0 +1,43 @@
+api.retainr.dev {
+    reverse_proxy localhost:8080
+
+    header {
+        # Security headers
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/api.log
+        format json
+    }
+}
+
+retainr.dev {
+    reverse_proxy localhost:3000
+
+    log {
+        output file /var/log/caddy/web.log
+        format json
+    }
+}
+
+analytics.retainr.dev {
+    # Umami self-hosted analytics — port 3001 on host (Docker maps 3000→3001)
+    reverse_proxy localhost:3001
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/analytics.log
+        format json
+    }
+}

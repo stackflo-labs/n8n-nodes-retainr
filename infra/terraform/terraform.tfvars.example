@@ -1,5 +1,8 @@
 # Copy to terraform.tfvars and fill in values. Never commit terraform.tfvars to git.
+# Get Scaleway credentials from: https://console.scaleway.com/iam/api-keys
 
-hetzner_token        = "your-hetzner-api-token"
+scaleway_access_key  = "SCWXXXXXXXXXXXXXXXXX"
+scaleway_secret_key  = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+scaleway_project_id  = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 cloudflare_api_token = "your-cloudflare-api-token"
 ssh_public_key       = "ssh-ed25519 AAAA... your@email.com"

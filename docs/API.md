@@ -194,64 +194,6 @@ Deletes all memories matching the filter. Requires at least one filter.
 
 ---
 
-## FlowPDF — PDF Generation API
-
-### Generate PDF
-`POST /v1/pdf/generate`
-
-Submits an async PDF generation job.
-
-**Request:**
-```json
-{
-  "template": "invoice",
-  "data": {
-    "invoice_number": "INV-001",
-    "client_name": "Acme Corp",
-    "items": [
-      {"description": "Consulting", "quantity": 10, "unit_price": 150}
-    ],
-    "currency": "EUR"
-  },
-  "webhook_url": "https://yourserver.com/webhook/pdf-done"
-}
-```
-
-**Built-in templates:** `invoice`, `purchase_order`, `quote`
-
-**Custom templates:** pass `template_html` (Handlebars string) instead of `template`.
-
-**Response `202`:**
-```json
-{
-  "job_id": "018edef0-...",
-  "status": "pending",
-  "estimated_seconds": 5
-}
-```
-
----
-
-### Get PDF Job Status
-`GET /v1/pdf/jobs/{job_id}`
-
-**Response `200`:**
-```json
-{
-  "job_id": "018edef0-...",
-  "status": "complete",
-  "result_url": "https://storage.retainr.dev/pdfs/018edef0-....pdf?expires=...",
-  "created_at": "2024-01-01T00:00:00Z",
-  "completed_at": "2024-01-01T00:00:05Z"
-}
-```
-
-Status values: `pending`, `processing`, `complete`, `failed`
-
-Result URL expires after 24 hours. Re-poll to get a fresh URL.
-
----
-
 ## Errors
 
 All errors follow this envelope:
@@ -300,17 +242,3 @@ Rate limit headers on every response:
 
 ---
 
-## Webhooks
-
-PDF completion webhooks POST to your `webhook_url`:
-
-```json
-{
-  "event": "pdf.complete",
-  "job_id": "018edef0-...",
-  "result_url": "https://storage.retainr.dev/...",
-  "workspace_id": "018e1234-..."
-}
-```
-
-Verify authenticity: check `X-Retainr-Signature` header (HMAC-SHA256 of body using your API key).

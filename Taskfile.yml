@@ -1,9 +1,10 @@
 version: '3'
 
 vars:
-  API_DIR: apps/api
-  WORKER_DIR: apps/worker
-  WEB_DIR: apps/web
+  RETAINR_API:    products/retainr/api
+  RETAINR_WORKER: products/retainr/worker
+  RETAINR_WEB:    products/retainr/web
+  RETAINR_NODE:   products/retainr/node
   BIN_DIR: .bin
 
 tasks:
@@ -14,30 +15,30 @@ tasks:
   # ── Dev ──────────────────────────────────────────────────────────────────────
 
   dev:api:
-    desc: Run API with hot reload (requires air)
-    dir: '{{.API_DIR}}'
+    desc: Run retainr API with hot reload (requires air)
+    dir: '{{.RETAINR_API}}'
     cmds: [air -c .air.toml]
     env:
       ENV: development
 
   dev:worker:
-    desc: Run background worker
-    dir: '{{.WORKER_DIR}}'
+    desc: Run retainr background worker
+    dir: '{{.RETAINR_WORKER}}'
     cmds: [go run ./cmd/worker]
     env:
       ENV: development
 
   dev:web:
-    desc: Run Next.js dev server
-    dir: '{{.WEB_DIR}}'
+    desc: Run retainr Next.js dev server
+    dir: '{{.RETAINR_WEB}}'
     cmds: [pnpm dev]
 
   dev:infra:
-    desc: Start local PostgreSQL + pgvector
-    cmds: [docker compose -f infra/docker-compose.dev.yml up -d]
+    desc: Start local PostgreSQL + pgvector + Umami
+    cmds: [docker compose -f products/retainr/infra/docker-compose.dev.yml up -d]
 
   dev:infra:down:
-    cmds: [docker compose -f infra/docker-compose.dev.yml down]
+    cmds: [docker compose -f products/retainr/infra/docker-compose.dev.yml down]
 
   dev:all:
     desc: Start infra + API + web concurrently
@@ -49,19 +50,17 @@ tasks:
   # ── Build ─────────────────────────────────────────────────────────────────────
 
   build:api:
-    desc: Build Go API binary
-    dir: '{{.API_DIR}}'
+    desc: Build retainr Go API binary
+    dir: '{{.RETAINR_API}}'
     cmds:
       - mkdir -p bin
       - go build -ldflags="-s -w" -o bin/api ./cmd/api
-    sources:
-      - '**/*.go'
-    generates:
-      - bin/api
+    sources: ['**/*.go']
+    generates: ['bin/api']
 
   build:worker:
-    desc: Build Go worker binary
-    dir: '{{.WORKER_DIR}}'
+    desc: Build retainr Go worker binary
+    dir: '{{.RETAINR_WORKER}}'
     cmds:
       - mkdir -p bin
       - go build -ldflags="-s -w" -o bin/worker ./cmd/worker
@@ -75,58 +74,72 @@ tasks:
   test:
     desc: Run all Go tests with race detector
     cmds:
-      - go test ./apps/api/... ./apps/worker/... -count=1 -race -timeout 120s
+      - cd packages/go/apikeys && go test ./... -count=1 -race -timeout 120s
+      - cd packages/go/apierr && go test ./... -count=1 -race -timeout 120s
+      - cd packages/go/logger && go test ./... -count=1 -race -timeout 120s
+      - cd products/retainr/api && go test ./... -count=1 -race -timeout 120s
+      - cd products/retainr/worker && go test ./... -count=1 -race -timeout 120s
 
   test:api:
-    desc: Run API tests verbosely
-    dir: '{{.API_DIR}}'
+    desc: Run retainr API tests verbosely
+    dir: '{{.RETAINR_API}}'
     cmds: [go test ./... -count=1 -race -v -timeout 120s]
 
   test:cover:
     desc: Run tests with coverage report
-    dir: '{{.API_DIR}}'
+    dir: '{{.RETAINR_API}}'
     cmds:
       - go test ./... -coverprofile=coverage.out -count=1
       - go tool cover -html=coverage.out -o coverage.html
-      - echo "Coverage report -> apps/api/coverage.html"
 
   test:billing:
-    desc: Run billing-specific tests (run before any Stripe changes)
-    dir: '{{.API_DIR}}'
+    desc: Run billing-specific tests
+    dir: '{{.RETAINR_API}}'
     cmds: [go test ./internal/features/workspace/... -run TestBilling -v -count=1]
+
+  test:packages:
+    desc: Run shared platform package tests
+    cmds:
+      - cd packages/go/apikeys && go test ./... -count=1 -race -v
+      - cd packages/go/apierr && go test ./... -count=1 -race -v
+      - cd packages/go/logger && go test ./... -count=1 -race -v
 
   # ── Lint / Format ─────────────────────────────────────────────────────────────
 
   lint:
     desc: Run all linters
     cmds:
-      - golangci-lint run ./apps/api/... ./apps/worker/...
-      - cd {{.WEB_DIR}} && pnpm lint
+      - cd packages/go/apikeys && golangci-lint run ./...
+      - cd packages/go/apierr && golangci-lint run ./...
+      - cd packages/go/logger && golangci-lint run ./...
+      - cd products/retainr/api && golangci-lint run ./...
+      - cd products/retainr/worker && golangci-lint run ./...
+      - cd {{.RETAINR_WEB}} && pnpm lint
 
   fmt:
     desc: Format all code
     cmds:
-      - gofmt -w apps/api apps/worker
-      - cd {{.WEB_DIR}} && pnpm prettier --write .
+      - gofmt -w packages/go products/retainr/api products/retainr/worker
+      - cd {{.RETAINR_WEB}} && pnpm prettier --write .
 
   # ── Database ──────────────────────────────────────────────────────────────────
 
   db:generate:
     desc: Regenerate sqlc types from queries
-    dir: '{{.API_DIR}}'
+    dir: '{{.RETAINR_API}}'
     cmds: [sqlc generate]
 
   db:reset:
     desc: Drop and recreate local dev database
     cmds:
-      - docker compose -f infra/docker-compose.dev.yml down -v
-      - docker compose -f infra/docker-compose.dev.yml up -d
+      - docker compose -f products/retainr/infra/docker-compose.dev.yml down -v
+      - docker compose -f products/retainr/infra/docker-compose.dev.yml up -d
       - sleep 3
-      - echo "Database reset. Migrations run automatically on next API start."
+      - echo "Database reset complete."
 
   db:psql:
     desc: Open psql shell to local dev database
-    cmds: [docker compose -f infra/docker-compose.dev.yml exec postgres psql -U retainr retainr_dev]
+    cmds: [docker compose -f products/retainr/infra/docker-compose.dev.yml exec postgres psql -U retainr retainr_dev]
 
   # ── Packages ──────────────────────────────────────────────────────────────────
 
@@ -135,63 +148,112 @@ tasks:
     cmds: [pnpm install]
 
   pkg:n8n:build:
-    desc: Build n8n community node
-    dir: packages/n8n-node
+    desc: Build retainr n8n community node
+    dir: '{{.RETAINR_NODE}}'
     cmds: [pnpm build]
 
   pkg:n8n:publish:
-    desc: Publish n8n node to npm
-    dir: packages/n8n-node
+    desc: Publish retainr n8n node to npm
+    dir: '{{.RETAINR_NODE}}'
     cmds:
       - pnpm build
       - pnpm publish --access public
 
-  pkg:sdk:build:
-    dir: packages/sdk
-    cmds: [pnpm build]
-
   # ── Deploy ────────────────────────────────────────────────────────────────────
 
   deploy:production:
-    desc: Build + deploy to Hetzner VPS
+    desc: Build + deploy retainr to VPS (requires ~/.ssh/config alias "retainr-vps")
     cmds:
       - task build:all
-      - rsync -avz --exclude='.git' --exclude='node_modules' --exclude='**/bin'
-          apps/api/bin/api hetzner:/opt/retainr/api
-      - rsync -avz apps/worker/bin/worker hetzner:/opt/retainr/worker
-      - rsync -avz infra/ hetzner:/opt/retainr/infra/
-      - ssh hetzner 'systemctl restart retainr-api retainr-worker'
-      - sleep 3
-      - curl -f https://api.retainr.dev/health || (echo "DEPLOY FAILED - health check failed" && exit 1)
+      - rsync -avz products/retainr/api/bin/api retainr-vps:/opt/retainr/api.new
+      - rsync -avz products/retainr/worker/bin/worker retainr-vps:/opt/retainr/worker.new
+      - rsync -avz products/retainr/infra/ retainr-vps:/opt/retainr/infra/
+      - ssh retainr-vps '
+          set -e
+          mv /opt/retainr/api /opt/retainr/api.prev || true
+          mv /opt/retainr/api.new /opt/retainr/api && chmod +x /opt/retainr/api
+          mv /opt/retainr/worker /opt/retainr/worker.prev || true
+          mv /opt/retainr/worker.new /opt/retainr/worker && chmod +x /opt/retainr/worker
+          systemctl restart retainr-api retainr-worker
+          sleep 5
+          curl -sf https://api.retainr.dev/health || (
+            echo "Health check failed — rolling back"
+            mv /opt/retainr/api.prev /opt/retainr/api
+            mv /opt/retainr/worker.prev /opt/retainr/worker
+            systemctl restart retainr-api retainr-worker
+            exit 1
+          )'
       - echo "Deploy successful"
 
   deploy:rollback:
-    desc: Rollback to previous binary on VPS
+    desc: Rollback retainr to previous binary on VPS
     cmds:
-      - ssh hetzner 'systemctl rollback retainr-api || true'
-      - ssh hetzner 'systemctl rollback retainr-worker || true'
+      - ssh retainr-vps 'mv /opt/retainr/api.prev /opt/retainr/api && mv /opt/retainr/worker.prev /opt/retainr/worker && systemctl restart retainr-api retainr-worker'
       - curl -f https://api.retainr.dev/health
 
   # ── SEO ───────────────────────────────────────────────────────────────────────
 
   seo:lighthouse:
-    desc: "Run Lighthouse CI audit (requires built site running)"
-    dir: '{{.WEB_DIR}}'
-    cmds:
-      - pnpm build
-      - npx lhci autorun
-
-  seo:check:
-    desc: "Full SEO check: lighthouse + link check"
-    cmds:
-      - task: seo:lighthouse
+    dir: '{{.RETAINR_WEB}}'
+    cmds: [pnpm build, npx lhci autorun]
 
   web:seo:
-    desc: "Build web app and run SEO analysis"
-    dir: '{{.WEB_DIR}}'
+    dir: '{{.RETAINR_WEB}}'
     cmds:
       - pnpm build
-      - echo "Build complete. Run 'pnpm start' then check: https://pagespeed.web.dev/analysis?url=http://localhost:3000"
+      - echo "Build complete. Check PageSpeed: https://pagespeed.web.dev/analysis?url=http://localhost:3000"
+
+  # ── E2E ───────────────────────────────────────────────────────────────────────
+
+  e2e:
+    desc: Run Playwright smoke tests locally
+    cmds: [pnpm exec playwright test --reporter=list]
+    env:
+      BASE_URL: http://localhost:3000
+      API_BASE_URL: http://localhost:8080
+
+  e2e:staging:
+    cmds: [pnpm exec playwright test --reporter=list]
+    env:
+      BASE_URL: https://staging.retainr.dev
+      API_BASE_URL: https://staging.api.retainr.dev
+
+  e2e:install:
+    cmds: [pnpm exec playwright install --with-deps chromium]
+
+  # ── Env / Secrets ─────────────────────────────────────────────────────────────
+
+  env:sync:production:
+    cmds: [bash scripts/gh-env-sync.sh production]
+
+  env:sync:staging:
+    cmds: [bash scripts/gh-env-sync.sh staging]
+
+  env:sync:
+    cmds: [bash scripts/gh-env-sync.sh {{.CLI_ARGS}}]
+
+  # ── Terraform ─────────────────────────────────────────────────────────────────
+
+  tf:init:
+    dir: infra/terraform
+    cmds: [terraform init]
+
+  tf:plan:
+    dir: infra/terraform
+    cmds: [terraform plan]
+
+  tf:apply:
+    dir: infra/terraform
+    cmds: [terraform apply]
+
+  tf:output:
+    dir: infra/terraform
+    cmds: [terraform output]
+
+  tf:destroy:
+    dir: infra/terraform
+    prompt: "This will destroy the VPS and all DNS records. Are you sure?"
+    cmds: [terraform destroy]
 
   # ── Setup ─────────────────────────────────────────────────────────────────────
 

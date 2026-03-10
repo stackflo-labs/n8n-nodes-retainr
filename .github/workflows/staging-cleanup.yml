@@ -1,0 +1,42 @@
+name: Staging Cleanup
+
+# When a PR is closed WITHOUT merging (abandoned, rejected), reset the staging
+# branch back to main so staging reflects a known-good state.
+#
+# When a PR IS merged, staging is already behind main — the next PR deploy
+# will force-push the PR branch anyway, so no action needed on merge.
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  reset-staging:
+    name: Reset staging to main
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Force-reset staging branch to main
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git push origin HEAD:refs/heads/staging --force
+          echo "Staging branch reset to main (PR #${{ github.event.pull_request.number }} was closed without merge)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Re-deploy staging so it reflects main, not the abandoned PR
+      - name: Re-deploy staging to main state
+        run: |
+          HTTP=$(curl -sf -X POST \
+            "${{ secrets.DOKPLOY_STAGING_WEBHOOK }}" \
+            -w "%{http_code}" -o /dev/null 2>/dev/null || echo "000")
+          echo "Staging redeploy triggered (HTTP $HTTP)"
+        continue-on-error: true   # Non-critical if webhook fails

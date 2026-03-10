@@ -2,7 +2,7 @@
 
 ## Vision
 
-AI agent memory persistence and PDF generation API for automation platform users.
+AI agent memory persistence API for automation platform users (Make.com, n8n, Zapier).
 Target: €500/month MRR within 6 months, fully autonomous operation.
 
 ---
@@ -27,7 +27,7 @@ Target: €500/month MRR within 6 months, fully autonomous operation.
 - [ ] goose migrations embedded, run on startup
 
 ### Database
-- [ ] Migration 001: workspaces, api_keys, memories (pgvector), pdf_jobs
+- [ ] Migration 001: workspaces, api_keys, memories (pgvector)
 - [ ] sqlc config + generated types
 - [ ] Row Level Security policies on memories table
 - [ ] HNSW index on embedding column
@@ -74,29 +74,7 @@ Target: €500/month MRR within 6 months, fully autonomous operation.
 
 ---
 
-## Milestone 2 — FlowPDF MVP (Week 4-5)
-
-**Goal:** PDF generation from Handlebars templates, async delivery.
-
-### Core API
-- [ ] `POST /v1/pdf/generate` — submit job, returns `{job_id, status: "pending"}`
-- [ ] `GET /v1/pdf/jobs/{id}` — poll status + result_url
-- [ ] Webhook callback: POST to user-provided URL when complete
-
-### Worker
-- [ ] Headless Chromium (chromedp) renders HTML template → PDF
-- [ ] Handlebars template engine (raymond in Go)
-- [ ] Upload result to Hetzner Object Storage (S3-compatible)
-- [ ] Presigned URL (24h expiry) returned as result_url
-
-### Built-in Templates
-- [ ] Invoice template
-- [ ] Purchase order template
-- [ ] Quote/proposal template
-
----
-
-## Milestone 3 — Dashboard + Billing (Week 5-6)
+## Milestone 2 — Dashboard + Billing (Week 4-5)
 
 **Goal:** Self-service signup, plan management, usage visibility.
 
@@ -127,14 +105,14 @@ Target: €500/month MRR within 6 months, fully autonomous operation.
 
 ### n8n Community Node (`@retainr/n8n-nodes-retainr`)
 - [ ] TypeScript node package
-- [ ] Operations: Store Memory, Search Memory, List Memories, Clear Memories, Generate PDF
+- [ ] Operations: Store Memory, Search Memory, List Memories, Delete Memories
 - [ ] Credential type: API Key
 - [ ] npm publish (`pnpm publish`)
 - [ ] Submit to n8n community nodes list
 
 ### Make.com Community App
 - [ ] JSON app definition
-- [ ] Modules: Store Memory, Search Memory, List Memories, Generate PDF
+- [ ] Modules: Store Memory, Search Memory, List Memories, Delete Memories
 - [ ] OAuth2 replaced by API Key auth (simpler for community apps)
 - [ ] Submit to Make.com app marketplace (2-3 day approval)
 
@@ -143,15 +121,12 @@ Target: €500/month MRR within 6 months, fully autonomous operation.
 - [ ] Use Zapier CLI when ready
 
 ### Template Library (acquisition funnel)
-- [ ] 8-10 pre-built workflows requiring retainr API key:
+- [ ] Pre-built memory workflows requiring retainr API key:
   - [ ] "Customer service AI with memory" (Make.com)
   - [ ] "Lead qualification agent that remembers context" (n8n)
   - [ ] "Shopify order follow-up with customer history" (Make.com)
   - [ ] "Email inbox AI assistant with long-term memory" (n8n)
   - [ ] "Sales CRM enrichment with AI notes" (Zapier)
-  - [ ] "Invoice generator from Airtable" (Make.com + FlowPDF)
-  - [ ] "Contract generator from form submission" (n8n + FlowPDF)
-  - [ ] "Quote generator for e-commerce" (Make.com + FlowPDF)
 - [ ] Each template: dedicated SEO landing page on retainr.dev/templates/<slug>
 - [ ] Each template: JSON/blueprint download gated behind email capture
 
@@ -173,8 +148,14 @@ Target: €500/month MRR within 6 months, fully autonomous operation.
 - [ ] Automatic Hetzner snapshot before every deploy
 
 ### Analytics (privacy-preserving)
-- [ ] Plausible Analytics on landing page (no cookies, GDPR compliant)
+- [ ] Umami Analytics on landing page — self-hosted, no cookies, GDPR compliant (replaces Plausible)
+      - Docker Compose service added (prod + dev), accessible at analytics.retainr.dev
+      - Add `<script async src="https://analytics.retainr.dev/script.js" data-website-id="...">` to layout.tsx after setting up Umami
 - [ ] Internal metrics: daily active workspaces, ops/day, conversion rate
+
+### Monitoring
+- [ ] Uptime Robot free plan — monitor https://api.retainr.dev/health every 5 min, email alert on 2 min downtime
+      Sign up at uptimerobot.com after VPS is live
 
 ### Expansion
 - [ ] Bubble.io plugin (visual dev community, high WTP)
@@ -200,12 +181,12 @@ Target: €500/month MRR within 6 months, fully autonomous operation.
 
 ## Pricing
 
-| Plan | Price | Memory Ops | PDFs | Rate Limit |
-|---|---|---|---|---|
-| Free | €0 | 1,000/month | 10/month | 100 req/min |
-| Builder | €29/month | 20,000/month | 200/month | 500 req/min |
-| Pro | €79/month | 100,000/month | 2,000/month | 2,000 req/min |
-| Agency | €199/month | Unlimited | Unlimited | 5,000 req/min |
+| Plan | Price | Memory Ops | Rate Limit |
+|---|---|---|---|
+| Free | €0 | 1,000/month | 100 req/min |
+| Builder | €29/month | 20,000/month | 500 req/min |
+| Pro | €79/month | 100,000/month | 2,000 req/min |
+| Agency | €199/month | Unlimited | 5,000 req/min |
 
 ---
 

@@ -1,6 +1,9 @@
 go 1.23
 
 use (
-	./apps/api
-	./apps/worker
+	./packages/go/apikeys
+	./packages/go/apierr
+	./packages/go/logger
+	./products/retainr/api
+	./products/retainr/worker
 )

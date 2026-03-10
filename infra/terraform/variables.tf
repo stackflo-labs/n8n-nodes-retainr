@@ -1,7 +1,18 @@
-variable "hetzner_token" {
-  description = "Hetzner Cloud API token (read+write)"
+variable "scaleway_access_key" {
+  description = "Scaleway IAM access key (SCW_ACCESS_KEY)"
   type        = string
   sensitive   = true
+}
+
+variable "scaleway_secret_key" {
+  description = "Scaleway IAM secret key (SCW_SECRET_KEY)"
+  type        = string
+  sensitive   = true
+}
+
+variable "scaleway_project_id" {
+  description = "Scaleway project ID (SCW_DEFAULT_PROJECT_ID)"
+  type        = string
 }
 
 variable "cloudflare_api_token" {

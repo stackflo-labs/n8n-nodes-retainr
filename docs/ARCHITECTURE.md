@@ -10,9 +10,9 @@ Internet
     │
     ▼
 ┌─────────────────────────────────────────────────┐
-│  Caddy (reverse proxy + automatic HTTPS)        │
+│  Traefik (reverse proxy + automatic HTTPS)      │
 │  api.retainr.dev → :8080                        │
-│  retainr.dev     → :3000 (or Vercel)            │
+│  retainr.dev     → :3000                        │
 └─────────────────────────────────────────────────┘
     │                           │
     ▼                           ▼
@@ -24,22 +24,18 @@ Internet
 │  CQRS slices │        │  Landing     │
 └──────┬───────┘        └──────────────┘
        │
-       ├──────────────────┐
-       ▼                  ▼
-┌──────────────┐  ┌──────────────┐
-│  PostgreSQL  │  │  Go Worker   │
-│  + pgvector  │  │              │
-│              │  │  Embeddings  │
-│  Workspaces  │  │  TTL cleanup │
-│  API keys    │  │  PDF render  │
-│  Memories    │  └──────┬───────┘
-│  PDF jobs    │         │
-└──────────────┘         ▼
-                  ┌──────────────┐
-                  │  Voyage AI   │  (embeddings)
-                  │  Chromium    │  (PDF render)
-                  │  Hetzner OS  │  (PDF storage)
-                  └──────────────┘
+       ▼
+┌──────────────┐
+│  PostgreSQL  │        ┌──────────────┐
+│  + pgvector  │        │  Go Worker   │
+│              │        │              │
+│  Workspaces  │        │  TTL cleanup │
+│  API keys    │        └──────┬───────┘
+│  Memories    │               │
+└──────────────┘               ▼
+                        ┌──────────────┐
+                        │  Voyage AI   │  (embeddings)
+                        └──────────────┘
 ```
 
 ## Request Flow — Memory Store
@@ -80,10 +76,6 @@ internal/features/
 │   └── delete/        ← DELETE /v1/memories
 │       ├── command.go
 │       └── handler.go
-├── pdf/
-│   └── generate/      ← POST /v1/pdf/generate
-│       ├── command.go
-│       └── handler.go
 └── workspace/
     ├── register/      ← POST /v1/workspace/register
     └── apikey/        ← POST/DELETE /v1/workspace/apikeys
@@ -108,8 +100,8 @@ extracted from the authenticated API key — RLS is a second line of defence, no
 - `HealthCheckPeriod`: 1 minute
 
 ### Job Queue (no Redis)
-`SELECT ... FOR UPDATE SKIP LOCKED` on `pdf_jobs` and `pending_embeddings` tables.
-Worker polls every 5 seconds. At MVP scale (< 100 jobs/hour) this is sufficient.
+`SELECT ... FOR UPDATE SKIP LOCKED` on `pending_embeddings` table.
+Worker polls every 5 seconds for TTL cleanup and embedding retries.
 Upgrade path: add `pgmq` extension or external queue if > 10k jobs/day.
 
 ### Vector Search
@@ -160,17 +152,6 @@ type Embedder interface {
 
 Implementations: `VoyageEmbedder`, `OpenAIEmbedder` (fallback), `NoopEmbedder` (testing).
 
-## Storage Interface (PDFs)
-
-```go
-type ObjectStore interface {
-    Put(ctx context.Context, key string, r io.Reader, contentType string) error
-    PresignedURL(ctx context.Context, key string, ttl time.Duration) (string, error)
-}
-```
-
-Implementation: `HetznerObjectStore` (S3-compatible). Testing: `MemoryObjectStore`.
-
 ## Structured Logging
 
 All logs use `log/slog` with these standard fields:
@@ -185,7 +166,6 @@ All logs use `log/slog` with these standard fields:
 | `latency_ms` | int64 | Every request |
 | `error` | string | On error |
 | `memory_id` | string | Memory operations |
-| `job_id` | string | PDF operations |
 
 Log format: JSON in production (stdout → systemd journal), text in development.
 
@@ -247,8 +227,8 @@ GitHub Actions: deploy.yml
 
 | Service | Monthly Cost | Notes |
 |---|---|---|
-| Hetzner CX32 | ~€10 | 4 vCPU, 8GB RAM |
-| Hetzner Volume (50GB) | ~€2.5 | Backups + PDF storage |
+| Scaleway DEV1-S | ~€7 | 2 vCPU, 2GB RAM |
+| Scaleway Volume (50GB) | ~€2.5 | pgdata + backups |
 | Voyage AI | ~€0.5 | $0.02/1M tokens, ~25M tokens at 1k ops |
 | Resend | €0 | Free tier: 3k emails/month |
 | Uptime Robot | €0 | Free tier: 50 monitors |

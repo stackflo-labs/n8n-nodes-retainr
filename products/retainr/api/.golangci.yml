@@ -1,0 +1,49 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  enable:
+    - gosec        # security issues
+    - govet        # suspicious constructs
+    - errcheck     # unchecked errors
+    - staticcheck  # static analysis
+    - unused       # unused code
+    - gofmt        # formatting
+    - goimports    # import ordering
+    - misspell     # spelling mistakes in comments
+    - prealloc     # slice preallocation
+    - bodyclose    # HTTP response body not closed
+    - noctx        # HTTP requests without context
+    - sqlclosecheck # sql.Rows/Stmt not closed
+    - exportloopref # loop variable capture (pre-Go 1.22)
+
+linters-settings:
+  gosec:
+    severity: medium
+    confidence: medium
+    excludes:
+      - G104  # errors unhandled — covered by errcheck
+      - G304  # file inclusion via variable — intentional in backup/log paths
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  goimports:
+    local-prefixes: github.com/retainr/api
+
+issues:
+  exclude-rules:
+    # Test files: allow unchecked errors, G104, etc.
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+    # Generated sqlc files — do not lint
+    - path: internal/platform/db/
+      linters:
+        - all
+
+  max-issues-per-linter: 50
+  max-same-issues: 10

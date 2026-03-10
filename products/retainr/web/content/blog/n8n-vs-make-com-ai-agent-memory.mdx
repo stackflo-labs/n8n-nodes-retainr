@@ -1,0 +1,148 @@
+---
+title: "n8n vs Make.com for AI Agents: Which Platform Handles Memory Better?"
+description: "Comparing n8n and Make.com for building AI agents with persistent memory. Spoiler: neither handles memory natively — here's how to add it to both."
+publishedAt: "2026-03-01"
+author: "retainr team"
+tags: ["n8n", "Make.com", "AI agents"]
+featured: false
+platform: general
+---
+
+n8n or Make.com? It's the question every automation builder faces. Both platforms have added AI capabilities, both claim to support "AI agents," and both have passionate communities arguing their case.
+
+But here's what neither platform will tell you upfront: **neither handles AI agent memory natively.** Every AI node on both platforms starts each run with a blank slate.
+
+This article gives you an honest comparison, including how to add real persistent memory to both.
+
+## Quick Overview
+
+| Feature | n8n | Make.com |
+|---------|-----|----------|
+| Pricing model | Self-hosted free / Cloud from $20 | Operations-based, from $9 |
+| AI nodes | AI Agent, Chat, OpenAI, Anthropic | OpenAI, Claude, custom HTTP |
+| Native memory | In-session only | None |
+| Community nodes | Yes (npm) | Yes (app marketplace) |
+| Code support | JavaScript/Python | None (visual only) |
+| Persistent memory | Via retainr ✓ | Via retainr ✓ |
+
+## n8n's AI Agent: What's Actually There
+
+n8n's AI Agent node is genuinely impressive. It supports:
+- Multi-step reasoning with tool use
+- Built-in conversation memory (within a session)
+- Connection to dozens of tools and APIs
+- Streaming output
+
+The critical limitation: **"within a session" means within one workflow execution.** Trigger the workflow again tomorrow, and the agent has forgotten everything.
+
+n8n has a "Memory Manager" node, but it stores data in volatile memory — not persistent. Close n8n, update the workflow, or trigger from a new session, and memory is gone.
+
+This is fine for single-session tasks ("help me write this email"). It completely breaks for ongoing relationships ("this is the customer who complained last month").
+
+## Make.com's AI Capabilities
+
+Make.com's AI story is different. There's no dedicated AI Agent concept — instead you compose modules:
+
+- **OpenAI module** for GPT calls
+- **Claude module** for Anthropic
+- **Text parser** for structured extraction
+- **HTTP module** for any other AI API
+
+This is actually quite flexible, but it means there's no built-in memory mechanism at all. Every scenario run starts completely fresh.
+
+Make.com's approach to AI is "bring the AI, we handle the automation" — which means memory is your problem to solve.
+
+## Head-to-Head: Building an AI Support Bot
+
+Let's compare building the same thing on both platforms.
+
+### The scenario: Customer sends a message, AI responds with context from past interactions
+
+**On n8n:**
+
+1. Webhook trigger
+2. retainr Search Memory node — finds relevant past context
+3. AI Agent node — with system prompt including memory
+4. retainr Store Memory node — saves the interaction
+5. Respond to Webhook
+
+Total nodes: 5. Build time: ~20 minutes.
+
+**On Make.com:**
+
+1. Webhook trigger
+2. retainr Search Memory module
+3. Text Aggregator — formats memories into a string
+4. OpenAI module — with system message including memory context
+5. retainr Store Memory module
+6. Webhook Response
+
+Total modules: 6. Build time: ~25 minutes.
+
+Both platforms result in roughly equivalent workflows. The main difference is that n8n's AI Agent node can do multi-step reasoning natively, while Make.com requires separate modules for each AI step.
+
+## Where n8n Wins
+
+**Self-hosting**: n8n can run on your own VPS for free. If data privacy is critical, you control everything. Make.com is SaaS-only.
+
+**Developer flexibility**: n8n lets you write JavaScript or Python nodes. For complex memory logic (custom scoring, filtering, re-ranking), you can code it directly.
+
+**AI agent architecture**: The built-in tool-use framework makes it easier to build agents that take actions based on AI decisions.
+
+**Cost at scale**: With self-hosted n8n, you pay for the server (~$10-20/month) but not per operation. Make.com's operation-based pricing adds up quickly at volume.
+
+## Where Make.com Wins
+
+**Visual clarity**: Make.com's scenario builder is genuinely easier to read and debug. Complex n8n workflows can become spaghetti.
+
+**Reliability**: Make.com's cloud infrastructure has stronger uptime guarantees than self-hosted n8n.
+
+**Non-technical builders**: Make.com is accessible to people who've never written code. n8n has a steeper learning curve.
+
+**App marketplace**: Make.com's app ecosystem is larger and more polished, including more pre-built integrations.
+
+## The Memory Verdict
+
+For persistent AI memory, both platforms need external storage. retainr works identically well on both — install the community node (n8n) or module (Make.com), configure your API key, and you get the same capabilities:
+
+- Vector similarity search across all past memories
+- User-level isolation
+- Session and long-term memory types
+- Tagging and filtering
+- Automatic TTL expiration
+
+The implementation looks different (nodes vs. modules) but the capability is the same.
+
+## Which Should You Choose?
+
+**Choose n8n if:**
+- You care about data privacy and want self-hosting
+- You'll build complex AI agents with multiple reasoning steps
+- You want to write code when needed
+- You're scaling to high volume and want to control costs
+
+**Choose Make.com if:**
+- Speed of building is most important
+- You're working with non-technical teammates
+- You want the most polished integration ecosystem
+- Reliability guarantees matter more than cost
+
+**In practice**: Most serious automation builders end up using both — Make.com for client-facing automations where polish matters, n8n for internal tools where flexibility matters.
+
+The good news is that your AI memory infrastructure (retainr) works the same on both, so switching platforms later doesn't mean rebuilding your agent's memory.
+
+<CTA text="Get persistent memory on any platform" href="/dashboard" />
+
+## Setting Up retainr on n8n
+
+```
+Settings → Community Nodes → Install: n8n-nodes-retainr
+```
+
+Then in any workflow, add the retainr node and configure your operations (Store, Search, Delete, List).
+
+## Setting Up retainr on Make.com
+
+Search "retainr" in the Make.com app marketplace. Connect with your API key from [retainr.dev/dashboard](/dashboard).
+
+The same API key works across both platforms — your AI agent's memory is platform-agnostic.

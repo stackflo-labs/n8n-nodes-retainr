@@ -1,0 +1,156 @@
+name: Investigate API Failure
+
+# Triggered by the VPS health-check.sh script via repository_dispatch when:
+#   - 3 consecutive health check failures
+#   - service restart did not recover
+#
+# Step 0: Create a preliminary incident issue immediately (always has a paper trail).
+# Step 1: Run baseline tests to understand pre-existing failures.
+# Step 2: Claude investigates with enriched context (logs + disk + RAM + DB state + git log).
+# Step 3: Claude creates a fix PR (goes through full pr-pipeline.yml → staging → e2e → auto-merge).
+
+on:
+  repository_dispatch:
+    types: [api-failure]
+
+jobs:
+  investigate:
+    name: Investigate and propose fix
+    runs-on: ubuntu-latest
+    environment: production
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      # ── Step 0: Open a preliminary incident issue ────────────────────────────
+      # This ensures a paper trail exists even if Claude's workflow times out.
+
+      - name: Create preliminary incident issue
+        id: incident
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const payload = context.payload.client_payload || {}
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[Incident] API health failure — ${new Date().toISOString().split('T')[0]}`,
+              body: [
+                '## Automated incident — investigation in progress',
+                '',
+                `- **Consecutive failures:** ${payload.failures ?? 'unknown'}`,
+                `- **Triggered at:** ${payload.triggered_at ?? new Date().toISOString()}`,
+                `- **Workflow run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                '',
+                '## Context from VPS',
+                '### API logs',
+                '```',
+                (payload.api_logs ?? 'not available').replace(/^"|"$/g, ''),
+                '```',
+                '### System state',
+                '```',
+                (payload.system_state ?? 'not available').replace(/^"|"$/g, ''),
+                '```',
+                '',
+                '_This issue will be updated with findings and closed when the fix PR merges._',
+              ].join('\n'),
+              labels: ['incident'],
+            })
+            core.setOutput('issue_number', issue.data.number)
+            return issue.data.number
+
+      # ── Step 1: Baseline test run ────────────────────────────────────────────
+
+      - name: Run baseline tests
+        id: baseline
+        continue-on-error: true
+        env:
+          ENV: test
+          DATABASE_URL: postgres://retainr:retainr@localhost:5432/retainr_test?sslmode=disable
+          VOYAGE_API_KEY: noop
+          STRIPE_SECRET_KEY: sk_test_noop
+          STRIPE_WEBHOOK_SECRET: whsec_noop
+          RESEND_API_KEY: noop
+        working-directory: products/retainr/api
+        run: go test ./... -count=1 -race -timeout 120s 2>&1 | tee /tmp/baseline.txt
+        # Note: no DB service here so DB tests fail — that's expected and informative
+
+      # ── Step 2: Claude investigates ─────────────────────────────────────────
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 8 --model claude-sonnet-4-6"
+          prompt: |
+            ## API health check failure — automated investigation
+
+            **Incident issue:** #${{ steps.incident.outputs.issue_number }}
+            **Consecutive failures:** ${{ github.event.client_payload.failures }}
+            **Triggered at:** ${{ github.event.client_payload.triggered_at }}
+            **Baseline tests:** ${{ steps.baseline.outcome }}
+
+            A service restart was attempted automatically on the VPS before this was dispatched — it did not recover.
+
+            ---
+
+            ### API service logs (last 100 lines)
+            ```
+            ${{ github.event.client_payload.api_logs }}
+            ```
+
+            ### Docker Compose logs (last 50 lines)
+            ```
+            ${{ github.event.client_payload.docker_logs }}
+            ```
+
+            ### System state at failure time (disk, RAM, recent deploys)
+            ```
+            ${{ github.event.client_payload.system_state }}
+            ```
+
+            ---
+
+            ## Your investigation process
+
+            1. **Classify the failure type** from the logs:
+               - OOM kill → look for `Killed` in docker logs, check RAM in system_state
+               - DB connection exhausted → look for `too many clients` or `dial tcp`
+               - Panic / segfault → look for `panic:` or `signal: killed`
+               - Bad deploy → look for recent commits in system_state, check if rollback helps
+               - External dependency (Voyage AI, Stripe) → look for 5xx in outbound calls
+
+            2. **Read relevant source files** to confirm the root cause.
+
+            3. **If it's a code bug:**
+               - Branch: `auto-fix/YYYY-MM-DD-<short-desc>`
+               - Write the fix
+               - Run `task test` — must pass before opening PR
+               - Open PR targeting `main` (it will go through full pipeline: staging → e2e → auto-merge → production)
+               - Comment the PR number on incident issue #${{ steps.incident.outputs.issue_number }}
+
+            4. **If it's infra / config (not fixable in code):**
+               - Comment on issue #${{ steps.incident.outputs.issue_number }} with diagnosis and required manual action
+               - Do NOT close the issue — leave it for the operator
+
+            5. **Always write** `docs/incidents/YYYY-MM-DD-<short-desc>.md` with:
+               - Timeline
+               - Root cause
+               - Fix applied (PR number) or manual action required
+               - Prevention
+
+            **Hard limits:**
+            - Max 2 different code fixes. If both fail tests, stop and update the issue.
+            - Do not touch Stripe billing logic or migration drops — update the issue instead.
+            - Do not commit secrets. Do not force-push main.

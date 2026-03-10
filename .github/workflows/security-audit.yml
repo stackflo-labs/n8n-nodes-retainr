@@ -1,0 +1,114 @@
+name: Weekly Security Audit
+
+# Replaces the VPS cron job that previously called:
+#   claude --dangerously-skip-permissions "Run security audit..."
+#
+# Runs every Sunday at 03:00 UTC.
+# Claude audits the codebase, dependencies, and writes findings to docs/audits/.
+# If issues are found, it creates a PR. Findings are always written regardless.
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'
+  workflow_dispatch:           # allow manual trigger
+
+jobs:
+  audit:
+    name: Security & dependency audit
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - run: pnpm install
+
+      # Collect dependency audit data before Claude runs
+      - name: Go vulnerability check
+        id: govuln
+        continue-on-error: true
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./products/retainr/api/... ./products/retainr/worker/... 2>&1 | tee /tmp/govuln.txt
+          echo "output<<EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/govuln.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: npm audit
+        id: npmaudit
+        continue-on-error: true
+        run: |
+          pnpm audit 2>&1 | tee /tmp/npmaudit.txt
+          echo "output<<EOF" >> "$GITHUB_OUTPUT"
+          cat /tmp/npmaudit.txt >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 8 --model claude-sonnet-4-6"
+          prompt: |
+            ## Weekly security audit — ${{ github.run_id }}
+
+            Date: Run triggered on ${{ github.event_name }}
+
+            **Go vulnerability scan output:**
+            ```
+            ${{ steps.govuln.outputs.output }}
+            ```
+
+            **npm/pnpm audit output:**
+            ```
+            ${{ steps.npmaudit.outputs.output }}
+            ```
+
+            ## Your tasks
+
+            1. **Review dependency scan results** above. For any HIGH or CRITICAL findings:
+               - Check if a patched version exists
+               - If yes, update the dependency and run tests
+               - If no patch exists, document the finding and any mitigations
+
+            2. **Scan the codebase for common security issues:**
+               - Hardcoded secrets or API keys (grep for patterns)
+               - SQL injection risk (any raw query construction)
+               - Missing authentication on routes
+               - CORS misconfiguration in the API
+               - Overly permissive RLS policies in migrations
+
+            3. **Write a findings report** to `docs/audits/$(date +%Y-%m-%d).md` containing:
+               - Executive summary (1 paragraph)
+               - Findings list with severity (Critical / High / Medium / Low / Info)
+               - Remediation status for each finding (Fixed in this run / Needs manual action / No action needed)
+
+            4. **If you fixed any issues**, commit them and create a PR titled
+               `security: weekly audit fixes YYYY-MM-DD` targeting `main`.
+               Always run `task test` before committing fixes.
+
+            5. **If there are unfixable HIGH/CRITICAL findings**, create a GitHub issue titled
+               `[Security] <description>` with label `security`.
+
+            **Constraints:**
+            - Do not modify Stripe webhook handling or billing logic.
+            - Do not remove or modify existing API fields (additive changes only).
+            - Write the audit doc regardless of whether you find issues.

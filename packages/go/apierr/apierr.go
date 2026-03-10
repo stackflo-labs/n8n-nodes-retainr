@@ -1,0 +1,37 @@
+// Package apierr provides standard JSON error responses for retainr platform APIs.
+package apierr
+
+import (
+	"encoding/json"
+	"net/http"
+
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+)
+
+type Response struct {
+	Error Detail `json:"error"`
+}
+
+type Detail struct {
+	Code      string `json:"code"`
+	Message   string `json:"message"`
+	RequestID string `json:"request_id,omitempty"`
+}
+
+// Write writes a JSON error response with the given HTTP status, error code, and message.
+func Write(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(Response{Error: Detail{Code: code, Message: message}}) //nolint:errcheck
+}
+
+// WriteWithRequestID writes a JSON error response including the chi request ID from context.
+func WriteWithRequestID(w http.ResponseWriter, r *http.Request, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(Response{Error: Detail{ //nolint:errcheck
+		Code:      code,
+		Message:   message,
+		RequestID: chimiddleware.GetReqID(r.Context()),
+	}})
+}

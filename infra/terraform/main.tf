@@ -2,9 +2,9 @@ terraform {
   required_version = ">= 1.6"
 
   required_providers {
-    hcloud = {
-      source  = "hetznercloud/hcloud"
-      version = "~> 1.49"
+    scaleway = {
+      source  = "scaleway/scaleway"
+      version = "~> 2.45"
     }
     cloudflare = {
       source  = "cloudflare/cloudflare"
@@ -12,8 +12,6 @@ terraform {
     }
   }
 
-  # Store state in Terraform Cloud or a local backend
-  # For production: use remote backend (Terraform Cloud free tier)
   backend "local" {
     path = "terraform.tfstate"
   }
@@ -21,8 +19,12 @@ terraform {
 
 # ── Providers ─────────────────────────────────────────────────────────────────
 
-provider "hcloud" {
-  token = var.hetzner_token
+provider "scaleway" {
+  access_key = var.scaleway_access_key
+  secret_key = var.scaleway_secret_key
+  project_id = var.scaleway_project_id
+  zone       = "fr-par-1"
+  region     = "fr-par"
 }
 
 provider "cloudflare" {
@@ -31,29 +33,36 @@ provider "cloudflare" {
 
 # ── SSH Key ───────────────────────────────────────────────────────────────────
 
-resource "hcloud_ssh_key" "deploy" {
+resource "scaleway_iam_ssh_key" "deploy" {
   name       = "retainr-deploy"
   public_key = var.ssh_public_key
 }
 
 # ── VPS ───────────────────────────────────────────────────────────────────────
 
-resource "hcloud_server" "retainr" {
-  name        = "retainr-prod"
-  server_type = "cx32"        # 4 vCPU, 8 GB RAM, ~€10/month
-  image       = "ubuntu-24.04"
-  location    = "fsn1"        # Falkenstein, Germany
-  ssh_keys    = [hcloud_ssh_key.deploy.id]
+resource "scaleway_instance_server" "retainr" {
+  name  = "retainr-prod"
+  type  = "DEV1-S"        # 2 vCPU, 2 GB RAM, 20 GB SSD, ~€7/month
+  image = "ubuntu_jammy"  # Ubuntu 22.04 LTS
+  zone  = "fr-par-1"      # Paris, France (GDPR-native)
 
-  user_data = templatefile("${path.module}/cloud-init.yaml", {
-    app_user    = "retainr"
-    ssh_pub_key = var.ssh_public_key
-  })
+  ip_id = scaleway_instance_ip.retainr.id
 
-  labels = {
-    env     = "production"
-    project = "retainr"
+  root_volume {
+    size_in_gb            = 20
+    delete_on_termination = false
   }
+
+  additional_volume_ids = [scaleway_instance_volume.retainr_data.id]
+
+  user_data = {
+    cloud-init = templatefile("${path.module}/cloud-init.yaml", {
+      app_user    = "retainr"
+      ssh_pub_key = var.ssh_public_key
+    })
+  }
+
+  tags = ["env:production", "project:retainr"]
 
   lifecycle {
     prevent_destroy = true
@@ -61,56 +70,53 @@ resource "hcloud_server" "retainr" {
   }
 }
 
-# ── Firewall ──────────────────────────────────────────────────────────────────
+resource "scaleway_instance_ip" "retainr" {
+  zone = "fr-par-1"
+}
 
-resource "hcloud_firewall" "retainr" {
-  name = "retainr-firewall"
+# ── Security Group (Firewall) ─────────────────────────────────────────────────
 
-  rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "22"
-    source_ips = ["0.0.0.0/0", "::/0"]
-    description = "SSH"
+resource "scaleway_instance_security_group" "retainr" {
+  name                    = "retainr-sg"
+  inbound_default_policy  = "drop"
+  outbound_default_policy = "accept"
+
+  inbound_rule {
+    action   = "accept"
+    protocol = "TCP"
+    port     = 22
   }
 
-  rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "80"
-    source_ips = ["0.0.0.0/0", "::/0"]
-    description = "HTTP (Caddy redirect to HTTPS)"
+  inbound_rule {
+    action   = "accept"
+    protocol = "TCP"
+    port     = 80
   }
 
-  rule {
-    direction  = "in"
-    protocol   = "tcp"
-    port       = "443"
-    source_ips = ["0.0.0.0/0", "::/0"]
-    description = "HTTPS"
+  inbound_rule {
+    action   = "accept"
+    protocol = "TCP"
+    port     = 443
   }
 
-  rule {
-    direction  = "in"
-    protocol   = "icmp"
-    source_ips = ["0.0.0.0/0", "::/0"]
-    description = "Ping"
+  inbound_rule {
+    action   = "accept"
+    protocol = "ICMP"
   }
 }
 
-resource "hcloud_firewall_attachment" "retainr" {
-  firewall_id = hcloud_firewall.retainr.id
-  server_ids  = [hcloud_server.retainr.id]
+resource "scaleway_instance_security_group_rules" "retainr" {
+  security_group_id = scaleway_instance_security_group.retainr.id
 }
 
-# ── Volume (backups + PDF storage temp) ──────────────────────────────────────
+# ── Additional Volume (pgdata + backups) ─────────────────────────────────────
+# Instance volume — attached as /dev/sdb, mounted to /opt/retainr/data in cloud-init
 
-resource "hcloud_volume" "retainr_data" {
-  name      = "retainr-data"
-  size      = 50
-  server_id = hcloud_server.retainr.id
-  automount = true
-  format    = "ext4"
+resource "scaleway_instance_volume" "retainr_data" {
+  name       = "retainr-data"
+  type       = "b_ssd"   # Block SSD — persistent, survives server restart
+  size_in_gb = 50
+  zone       = "fr-par-1"
 
   lifecycle {
     prevent_destroy = true
@@ -126,18 +132,18 @@ data "cloudflare_zones" "retainr" {
 }
 
 locals {
-  zone_id = data.cloudflare_zones.retainr.zones[0].id
-  server_ip = hcloud_server.retainr.ipv4_address
+  zone_id   = data.cloudflare_zones.retainr.zones[0].id
+  server_ip = scaleway_instance_ip.retainr.address
 }
 
-# Root domain → web (Vercel handles this separately, or point here)
+# Root domain → web
 resource "cloudflare_record" "root" {
   zone_id = local.zone_id
   name    = "@"
   type    = "A"
   value   = local.server_ip
-  proxied = true   # Cloudflare proxy = DDoS protection + WAF
-  ttl     = 1      # Auto when proxied
+  proxied = true
+  ttl     = 1
 }
 
 resource "cloudflare_record" "www" {
@@ -149,13 +155,52 @@ resource "cloudflare_record" "www" {
   ttl     = 1
 }
 
-# API subdomain → VPS (proxied through Cloudflare)
+# API subdomain → VPS
 resource "cloudflare_record" "api" {
   zone_id = local.zone_id
   name    = "api"
   type    = "A"
   value   = local.server_ip
   proxied = true
+  ttl     = 1
+}
+
+# Analytics subdomain → Umami (via Dokploy/Traefik)
+resource "cloudflare_record" "analytics" {
+  zone_id = local.zone_id
+  name    = "analytics"
+  type    = "A"
+  value   = local.server_ip
+  proxied = true
+  ttl     = 1
+}
+
+# Staging subdomains → same VPS, Traefik routes by hostname
+resource "cloudflare_record" "staging_api" {
+  zone_id = local.zone_id
+  name    = "staging.api"
+  type    = "A"
+  value   = local.server_ip
+  proxied = true
+  ttl     = 1
+}
+
+resource "cloudflare_record" "staging_web" {
+  zone_id = local.zone_id
+  name    = "staging"
+  type    = "A"
+  value   = local.server_ip
+  proxied = true
+  ttl     = 1
+}
+
+# Dokploy management UI
+resource "cloudflare_record" "dokploy" {
+  zone_id = local.zone_id
+  name    = "dokploy"
+  type    = "A"
+  value   = local.server_ip
+  proxied = false  # Direct — Traefik handles TLS for Dokploy UI too
   ttl     = 1
 }
 
@@ -182,7 +227,7 @@ resource "cloudflare_ruleset" "retainr_waf" {
   }
 }
 
-# Cloudflare Page Rules: cache static, no-cache API
+# Cloudflare Page Rules: no-cache API
 resource "cloudflare_page_rule" "api_no_cache" {
   zone_id  = local.zone_id
   target   = "api.retainr.dev/*"

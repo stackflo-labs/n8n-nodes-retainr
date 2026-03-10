@@ -3,11 +3,11 @@ name: SEO Audit
 on:
   pull_request:
     paths:
-      - 'apps/web/**'
+      - 'products/retainr/web/**'
   push:
     branches: [main]
     paths:
-      - 'apps/web/**'
+      - 'products/retainr/web/**'
 
 jobs:
   lighthouse:
@@ -22,15 +22,15 @@ jobs:
         with:
           node-version: 20
           cache: 'pnpm'
-          cache-dependency-path: apps/web/pnpm-lock.yaml
+          cache-dependency-path: products/retainr/web/pnpm-lock.yaml
       - name: Install dependencies
-        working-directory: apps/web
+        working-directory: products/retainr/web
         run: pnpm install --frozen-lockfile
       - name: Build
-        working-directory: apps/web
+        working-directory: products/retainr/web
         run: pnpm build
       - name: Run Lighthouse CI
-        working-directory: apps/web
+        working-directory: products/retainr/web
         run: npx lhci autorun
         env:
           LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
