@@ -1,0 +1,286 @@
+---
+title: "Using OpenAI with Make.com: Add Memory to Your AI Scenarios"
+description: "Make.com's OpenAI integration is powerful but stateless by default. This tutorial shows you exactly how to add persistent memory to any Make.com GPT-4 scenario, step by step."
+publishedAt: "2026-03-11"
+author: "retainr team"
+tags: ["Make.com", "OpenAI", "tutorial", "memory"]
+featured: false
+draft: false
+---
+
+Make.com's OpenAI module is genuinely one of the best tools in the automation ecosystem. You can wire up GPT-4o to anything — Slack, Gmail, Airtable, webhooks, your CRM — without writing a single line of code.
+
+But there's a catch that catches everyone eventually: **it has no memory.**
+
+Every time your scenario runs, the OpenAI module sees only what you pass it in that single run. It doesn't know what happened last time. It doesn't remember the user. It starts completely fresh.
+
+This tutorial shows you exactly how to fix that — with specific field values, module configurations, and a complete scenario blueprint you can follow.
+
+## The Root Cause of the Stateless Problem
+
+Make.com scenarios are event-driven. A trigger fires (webhook, schedule, email), the scenario processes data, and it terminates. Any data created during the run exists only in that run's memory.
+
+This design is intentional and generally correct. It makes scenarios reliable, reproducible, and easy to debug. But it means the OpenAI module has no access to:
+
+- What a user said in previous runs
+- What responses the AI gave before
+- Any context you've accumulated over time
+
+The typical workaround — storing conversation history in a Google Doc or a data store and passing it all to the AI every time — collapses once history grows long. You'll hit OpenAI's context limits, slow down your scenario, and pay for tokens that aren't relevant to the current question.
+
+The correct solution is **retrieval-augmented memory**: store interactions, then search for only the relevant ones.
+
+## What We're Building
+
+A Make.com scenario that:
+
+1. Receives a user message via webhook
+2. Searches for relevant past interactions for that user
+3. Passes the relevant context to GPT-4o
+4. Generates a personalized, context-aware response
+5. Stores the new interaction for future use
+6. Responds to the webhook
+
+This pattern works for any AI use case: customer support, sales assistance, personal AI assistants, content generation, project management bots.
+
+## Prerequisites
+
+- A Make.com account (any paid plan)
+- An OpenAI API key
+- A retainr account (free tier works for this tutorial)
+
+## Module-by-Module Setup
+
+### Module 1: Webhooks — Custom Webhook
+
+**Trigger type**: Instant
+**Method**: POST
+
+Expected JSON structure (click "Add" to define fields):
+
+```json
+{
+  "userId": "string",
+  "message": "string",
+  "sessionId": "string (optional)"
+}
+```
+
+Set **userId** as a required field. This is how memories are scoped per user.
+
+<Callout type="tip">
+Use a stable, unique identifier for userId — the user's email address, their CRM ID, or a UUID you generate on first contact. Never use a temporary session token that changes per visit.
+</Callout>
+
+### Module 2: retainr — Search Memory
+
+**App**: retainr (search "retainr" in the apps panel)
+**Operation**: Search Memory
+
+| Field | Value | Notes |
+|-------|-------|-------|
+| Query | `{{1.message}}` | The incoming user message |
+| User ID | `{{1.userId}}` | Scopes search to this user only |
+| Limit | `5` | 3-5 is usually right |
+| Tags Filter | *(leave empty)* | Optional — filter by tag if needed |
+
+This returns an array of memory objects. Each has a `content` field (what was stored), a `score` field (relevance 0-1), and metadata.
+
+### Module 3: Tools — Set Variable (Format Memories)
+
+Before the OpenAI module, format the memories into clean text. Add a **Set Variable** module (under Tools):
+
+**Variable name**: `memoryContext`
+
+**Variable value** (use the formula editor):
+
+```
+{{if(2.memories.length > 0, "RELEVANT CONTEXT FROM PAST INTERACTIONS:\n\n" + join(map(2.memories, "content"), "\n\n---\n\n"), "No previous interaction history for this user.")}}
+```
+
+This produces a readable text block if memories exist, or a clear signal that this is a new user.
+
+### Module 4: OpenAI — Create a Chat Completion
+
+**Model**: `gpt-4o` (or `gpt-4o-mini` for lower cost)
+**System Message**:
+
+```
+You are a helpful assistant.
+
+{{3.memoryContext}}
+
+Use the above context to personalize your response. Reference specific past interactions when relevant. If the user mentions something they asked before, acknowledge it naturally.
+
+Keep responses concise and focused on what the user is asking now.
+```
+
+**User Message**: `{{1.message}}`
+
+**Temperature**: `0.7` (adjust per use case — lower for factual, higher for creative)
+**Max Tokens**: `500` (increase for longer responses)
+
+<Callout type="warning">
+Do not set Max Tokens too high. If a user sends a short message and you return 2,000 tokens, your OpenAI costs multiply fast. Start at 500 and increase only if your use case requires longer outputs.
+</Callout>
+
+### Module 5: retainr — Store Memory
+
+After OpenAI responds, store the interaction:
+
+**Operation**: Store Memory
+
+| Field | Value | Notes |
+|-------|-------|-------|
+| Content | `User: {{1.message}}\n\nAssistant: {{4.choices[].message.content}}` | Full exchange |
+| User ID | `{{1.userId}}` | Same as search |
+| Session ID | `{{1.sessionId}}` | Optional — for session-scoped memory |
+| Tags | `conversation` | Add topic tags if you know them |
+
+Store both the user message and the AI response in the same memory object. This doubles the signal the vector search has when finding this memory in future queries.
+
+### Module 6: Webhooks — Respond to Webhook
+
+**Status**: 200
+**Body type**: JSON
+
+```json
+{
+  "response": "{{4.choices[].message.content}}",
+  "memoriesUsed": "{{length(2.memories)}}"
+}
+```
+
+Including `memoriesUsed` in the response is useful for debugging — you can see at a glance how many memories were injected.
+
+## The Complete Scenario Flow
+
+Here's what the finished scenario looks like:
+
+```
+[Webhook] → [Search Memory] → [Format Memories] → [OpenAI GPT-4o] → [Store Memory] → [Respond]
+```
+
+Total modules: 6. Build time from scratch: 20-30 minutes.
+
+## Real-World Configuration Example: Support Bot
+
+Let's make this concrete. You're building a support bot for a SaaS product. Here's how to adapt the configuration.
+
+**Webhook payload** from your frontend:
+
+```json
+{
+  "userId": "user@company.com",
+  "message": "I keep getting a 403 error when trying to export reports",
+  "plan": "pro",
+  "accountAge": 47
+}
+```
+
+**System prompt** (Module 4, updated):
+
+```
+You are a support agent for Acme SaaS. You have access to the user's interaction history below.
+
+USER PLAN: {{1.plan}}
+ACCOUNT AGE: {{1.accountAge}} days
+
+{{3.memoryContext}}
+
+When handling issues:
+1. Check if this is a recurring problem (look at the history)
+2. Reference specific past interactions if relevant
+3. Give a direct fix, not a generic "contact support" response
+4. If you can't resolve it, escalate with specific context about the issue
+
+Be direct and specific. This user knows the product.
+```
+
+**Memory content** (Module 5, updated):
+
+```
+Issue: {{1.message}} | Plan: {{1.plan}} | Resolution: {{4.choices[].message.content}}
+```
+
+Now when this user reports the same 403 error three months later, your bot knows they've had this before, knows what was tried, and can skip straight to escalation or deeper troubleshooting.
+
+## Advanced: Tagging Memories by Topic
+
+For higher-volume bots, tagging memories lets you filter searches by category. Add a pre-processing step that classifies the message topic before storing:
+
+Add an additional **OpenAI** module before the Store step with this prompt:
+
+```
+Classify this support message into ONE of: billing, technical, feature-request, account, general.
+
+Message: {{1.message}}
+
+Return ONLY the category word, nothing else.
+```
+
+Then use the result as a tag in the Store Memory module:
+
+| Tags | `conversation, {{5.choices[].message.content}}` |
+
+Now your searches can filter: `tags: ["billing"]` to surface only billing-related past interactions when the current message is about billing.
+
+<Callout type="tip">
+This classification step costs fractions of a cent per message with GPT-4o-mini. At 10,000 messages per month, you're looking at under $1 extra. The improved search relevance is worth it.
+</Callout>
+
+## Handling Edge Cases
+
+**What if retainr is down?**
+
+Add an error handler to Module 2. Route errors to a **Set Variable** module that sets `memoryContext` to an empty string. The scenario continues without memory rather than failing entirely.
+
+**What if the user is new (no memories yet)?**
+
+The Search Memory module returns an empty array. The Format Memories module (Module 3) handles this with the `if()` expression — it produces "No previous interaction history for this user." The AI knows to treat this as a first interaction.
+
+**What if the AI response is cut off by Max Tokens?**
+
+Don't store incomplete responses. Add a filter after Module 4: check that `{{length(4.choices[].message.content)}}` is greater than 50 characters before continuing to Module 5. Short responses usually indicate a truncation or error.
+
+## Cost Analysis
+
+For 1,000 conversations per month:
+
+| Component | Monthly Cost |
+|-----------|-------------|
+| Make.com (Core plan) | €10.59 |
+| OpenAI GPT-4o (avg 1,000 tokens/call) | ~$15 |
+| retainr (Builder plan) | €29 |
+| **Total** | **~€55** |
+
+If you're building a customer support bot for a business, this is trivially cheap compared to human support costs. A single avoided support ticket pays for the month.
+
+## What This Unlocks
+
+With this setup, your Make.com AI scenario can:
+
+- Remember a customer complained about billing 6 weeks ago
+- Know that a user has contacted support 4 times and is at churn risk
+- Recall that someone prefers bullet-point answers over paragraphs
+- Reference that a user asked for a specific feature — and tell them it shipped
+
+This is the difference between a chatbot and an AI assistant that actually feels like it knows the user.
+
+<CTA text="Get your free retainr API key" href="/dashboard" />
+
+## Frequently Asked Questions
+
+**Do I need to install anything?** No. retainr is available as a Make.com app in the marketplace. Your API key connects instantly.
+
+**Will this work with Claude instead of GPT-4o?** Yes. Swap Module 4 for the Anthropic module. The memory injection is model-agnostic — it's just text in the system prompt.
+
+**How do I handle multiple AI assistants with the same users?** Use a prefix in your userId field: `support-user@company.com` vs `sales-user@company.com`. This keeps memory pools separate even for the same underlying user.
+
+**Can I export or delete all memories for a user?** Yes — the retainr API has a `DELETE /v1/memories` endpoint that accepts `userId` as a filter parameter. One call removes all memories for that user, which is important for GDPR compliance.
+
+## Next Steps
+
+- [Full API reference](/docs)
+- [n8n memory guide](/blog/why-n8n-ai-agents-forget-everything)
+- [Build a complete customer support AI](/blog/build-customer-service-ai-with-memory)
