@@ -19,9 +19,13 @@ export const metadata: Metadata = {
     "AI agent memory", "n8n memory", "Make.com AI", "Zapier AI",
     "workflow automation", "AI context persistence", "pgvector",
     "n8n AI agent", "stateful workflows", "automation API",
+    "n8n community node", "Make.com app", "persistent memory",
+    "AI workflow memory", "agent context", "vector memory API",
   ],
   authors: [{ name: "retainr", url: SITE_URL }],
   creator: "retainr",
+  publisher: "retainr",
+  category: "technology",
   openGraph: {
     type: "website",
     url: SITE_URL,
@@ -29,16 +33,24 @@ export const metadata: Metadata = {
     title: "retainr — AI Agent Memory for Make.com, n8n & Zapier",
     description:
       "Persistent AI agent memory for automation workflows. Store, search, and recall context across Make.com, n8n, and Zapier runs. No code required.",
-    images: [{ url: "/og.png", width: 1200, height: 630, alt: "retainr — AI agent memory" }],
+    locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
     title: "retainr — AI Agent Memory for Make.com, n8n & Zapier",
     description: "Give your AI agents persistent memory across workflow runs.",
-    images: ["/og.png"],
+    creator: "@retainr_dev",
+    site: "@retainr_dev",
   },
-  robots: { index: true, follow: true, googleBot: { index: true, follow: true } },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+  },
   alternates: { canonical: SITE_URL },
+  verification: {
+    // google: "your-google-verification-token",
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
