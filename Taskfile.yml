@@ -1,0 +1,184 @@
+version: '3'
+
+vars:
+  API_DIR: apps/api
+  WORKER_DIR: apps/worker
+  WEB_DIR: apps/web
+  BIN_DIR: .bin
+
+tasks:
+  default:
+    silent: true
+    cmds: [task --list]
+
+  # ── Dev ──────────────────────────────────────────────────────────────────────
+
+  dev:api:
+    desc: Run API with hot reload (requires air)
+    dir: '{{.API_DIR}}'
+    cmds: [air -c .air.toml]
+    env:
+      ENV: development
+
+  dev:worker:
+    desc: Run background worker
+    dir: '{{.WORKER_DIR}}'
+    cmds: [go run ./cmd/worker]
+    env:
+      ENV: development
+
+  dev:web:
+    desc: Run Next.js dev server
+    dir: '{{.WEB_DIR}}'
+    cmds: [pnpm dev]
+
+  dev:infra:
+    desc: Start local PostgreSQL + pgvector
+    cmds: [docker compose -f infra/docker-compose.dev.yml up -d]
+
+  dev:infra:down:
+    cmds: [docker compose -f infra/docker-compose.dev.yml down]
+
+  dev:all:
+    desc: Start infra + API + web concurrently
+    deps: [dev:infra]
+    cmds:
+      - task dev:api &
+      - task dev:web
+
+  # ── Build ─────────────────────────────────────────────────────────────────────
+
+  build:api:
+    desc: Build Go API binary
+    dir: '{{.API_DIR}}'
+    cmds:
+      - mkdir -p bin
+      - go build -ldflags="-s -w" -o bin/api ./cmd/api
+    sources:
+      - '**/*.go'
+    generates:
+      - bin/api
+
+  build:worker:
+    desc: Build Go worker binary
+    dir: '{{.WORKER_DIR}}'
+    cmds:
+      - mkdir -p bin
+      - go build -ldflags="-s -w" -o bin/worker ./cmd/worker
+
+  build:all:
+    desc: Build all Go binaries
+    deps: [build:api, build:worker]
+
+  # ── Test ──────────────────────────────────────────────────────────────────────
+
+  test:
+    desc: Run all Go tests with race detector
+    cmds:
+      - go test ./apps/api/... ./apps/worker/... -count=1 -race -timeout 120s
+
+  test:api:
+    desc: Run API tests verbosely
+    dir: '{{.API_DIR}}'
+    cmds: [go test ./... -count=1 -race -v -timeout 120s]
+
+  test:cover:
+    desc: Run tests with coverage report
+    dir: '{{.API_DIR}}'
+    cmds:
+      - go test ./... -coverprofile=coverage.out -count=1
+      - go tool cover -html=coverage.out -o coverage.html
+      - echo "Coverage report -> apps/api/coverage.html"
+
+  test:billing:
+    desc: Run billing-specific tests (run before any Stripe changes)
+    dir: '{{.API_DIR}}'
+    cmds: [go test ./internal/features/workspace/... -run TestBilling -v -count=1]
+
+  # ── Lint / Format ─────────────────────────────────────────────────────────────
+
+  lint:
+    desc: Run all linters
+    cmds:
+      - golangci-lint run ./apps/api/... ./apps/worker/...
+      - cd {{.WEB_DIR}} && pnpm lint
+
+  fmt:
+    desc: Format all code
+    cmds:
+      - gofmt -w apps/api apps/worker
+      - cd {{.WEB_DIR}} && pnpm prettier --write .
+
+  # ── Database ──────────────────────────────────────────────────────────────────
+
+  db:generate:
+    desc: Regenerate sqlc types from queries
+    dir: '{{.API_DIR}}'
+    cmds: [sqlc generate]
+
+  db:reset:
+    desc: Drop and recreate local dev database
+    cmds:
+      - docker compose -f infra/docker-compose.dev.yml down -v
+      - docker compose -f infra/docker-compose.dev.yml up -d
+      - sleep 3
+      - echo "Database reset. Migrations run automatically on next API start."
+
+  db:psql:
+    desc: Open psql shell to local dev database
+    cmds: [docker compose -f infra/docker-compose.dev.yml exec postgres psql -U retainr retainr_dev]
+
+  # ── Packages ──────────────────────────────────────────────────────────────────
+
+  pkg:install:
+    desc: Install all pnpm dependencies
+    cmds: [pnpm install]
+
+  pkg:n8n:build:
+    desc: Build n8n community node
+    dir: packages/n8n-node
+    cmds: [pnpm build]
+
+  pkg:n8n:publish:
+    desc: Publish n8n node to npm
+    dir: packages/n8n-node
+    cmds:
+      - pnpm build
+      - pnpm publish --access public
+
+  pkg:sdk:build:
+    dir: packages/sdk
+    cmds: [pnpm build]
+
+  # ── Deploy ────────────────────────────────────────────────────────────────────
+
+  deploy:production:
+    desc: Build + deploy to Hetzner VPS
+    cmds:
+      - task build:all
+      - rsync -avz --exclude='.git' --exclude='node_modules' --exclude='**/bin'
+          apps/api/bin/api hetzner:/opt/retainr/api
+      - rsync -avz apps/worker/bin/worker hetzner:/opt/retainr/worker
+      - rsync -avz infra/ hetzner:/opt/retainr/infra/
+      - ssh hetzner 'systemctl restart retainr-api retainr-worker'
+      - sleep 3
+      - curl -f https://api.retainr.dev/health || (echo "DEPLOY FAILED - health check failed" && exit 1)
+      - echo "Deploy successful"
+
+  deploy:rollback:
+    desc: Rollback to previous binary on VPS
+    cmds:
+      - ssh hetzner 'systemctl rollback retainr-api || true'
+      - ssh hetzner 'systemctl rollback retainr-worker || true'
+      - curl -f https://api.retainr.dev/health
+
+  # ── Setup ─────────────────────────────────────────────────────────────────────
+
+  setup:
+    desc: One-time dev environment setup
+    cmds:
+      - go install github.com/air-verse/air@latest
+      - go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - pnpm install
+      - echo "Setup complete. Run 'task dev:infra' then 'task dev:api'"

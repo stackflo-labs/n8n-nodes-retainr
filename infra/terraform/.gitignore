@@ -1,0 +1,8 @@
+# Terraform state and secrets — never commit
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfvars
+*.tfvars
+!*.tfvars.example
+.terraform.lock.hcl

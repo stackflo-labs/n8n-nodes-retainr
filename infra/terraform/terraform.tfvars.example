@@ -1,0 +1,5 @@
+# Copy to terraform.tfvars and fill in values. Never commit terraform.tfvars to git.
+
+hetzner_token        = "your-hetzner-api-token"
+cloudflare_api_token = "your-cloudflare-api-token"
+ssh_public_key       = "ssh-ed25519 AAAA... your@email.com"

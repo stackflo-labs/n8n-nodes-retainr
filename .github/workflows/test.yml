@@ -1,0 +1,77 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test-api:
+    name: Go API Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: retainr
+          POSTGRES_PASSWORD: retainr
+          POSTGRES_DB: retainr_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      ENV: test
+      DATABASE_URL: postgres://retainr:retainr@localhost:5432/retainr_test?sslmode=disable
+      VOYAGE_API_KEY: noop
+      STRIPE_SECRET_KEY: sk_test_noop
+      STRIPE_WEBHOOK_SECRET: whsec_noop
+      RESEND_API_KEY: noop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Run tests
+        working-directory: apps/api
+        run: go test ./... -count=1 -race -timeout 120s
+
+  lint-api:
+    name: Go Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: apps/api
+
+  test-web:
+    name: Web Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install
+      - run: pnpm --filter web lint
+      - run: pnpm --filter web build

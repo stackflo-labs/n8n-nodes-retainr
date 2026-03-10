@@ -1,0 +1,53 @@
+#cloud-config
+# Runs once on first boot of the Hetzner VPS
+
+users:
+  - name: ${app_user}
+    groups: [sudo, docker]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_pub_key}
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - curl
+  - wget
+  - git
+  - htop
+  - unzip
+  - postgresql-client
+  - docker.io
+  - docker-compose-v2
+  - caddy
+
+runcmd:
+  # Docker
+  - systemctl enable --now docker
+  - usermod -aG docker ${app_user}
+
+  # Caddy
+  - systemctl enable --now caddy
+
+  # App directories
+  - mkdir -p /opt/retainr/{backups,logs,pdfs}
+  - chown -R ${app_user}:${app_user} /opt/retainr
+
+  # Mount volume (auto-mounted by Hetzner to /mnt/HC_Volume_*)
+  # Symlink for predictable path
+  - ln -sf /mnt/HC_Volume_* /opt/retainr/data || true
+
+  # Claude Code for self-healing
+  - curl -fsSL https://claude.ai/install.sh | sh || true
+
+  # Crontab for self-healing
+  - |
+    (crontab -u ${app_user} -l 2>/dev/null; echo "*/15 * * * * /opt/retainr/scripts/health-check.sh >> /opt/retainr/logs/health.log 2>&1") | crontab -u ${app_user} -
+  - |
+    (crontab -u ${app_user} -l 2>/dev/null; echo "0 2 * * * /opt/retainr/scripts/backup.sh >> /opt/retainr/logs/backup.log 2>&1") | crontab -u ${app_user} -
+  - |
+    (crontab -u ${app_user} -l 2>/dev/null; echo "0 3 * * 0 cd /opt/retainr && claude --dangerously-skip-permissions 'Weekly security audit: check deps, review error rates in /opt/retainr/logs/api.log from past 7 days, fix any issues found, write report to docs/audits/\$(date +%%Y-%%m-%%d).md' >> /opt/retainr/logs/claude.log 2>&1") | crontab -u ${app_user} -
+
+final_message: "retainr VPS setup complete"
