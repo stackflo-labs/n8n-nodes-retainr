@@ -1,4 +1,0 @@
-packages:
-  - 'packages/ui-kit'
-  - 'products/retainr/web'
-  - 'products/retainr/node'
