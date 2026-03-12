@@ -1,0 +1,65 @@
+name: Publish to npm
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'package.json'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Ensure npm 11.5.1+ for trusted publishing
+        run: npm install -g npm@latest
+
+      - name: Configure npm registry (OIDC handles auth)
+        run: echo "registry=https://registry.npmjs.org/" > ~/.npmrc
+
+      - name: Check if version is new
+        id: version-check
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          NPM_VERSION=$(npm view "$PACKAGE_NAME" version 2>/dev/null || echo "0.0.0")
+          echo "package=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "published=$NPM_VERSION" >> "$GITHUB_OUTPUT"
+          if [ "$PACKAGE_VERSION" != "$NPM_VERSION" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "New version detected: $PACKAGE_VERSION (npm has $NPM_VERSION)"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "Version $PACKAGE_VERSION already published — skipping"
+          fi
+
+      - name: Install dependencies
+        if: steps.version-check.outputs.should_publish == 'true'
+        run: npm install
+
+      - name: Build
+        if: steps.version-check.outputs.should_publish == 'true'
+        run: npm run build
+
+      - name: Publish to npm (OIDC trusted publishing + provenance)
+        if: steps.version-check.outputs.should_publish == 'true'
+        run: npm publish --access public --provenance
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.version-check.outputs.should_publish }}" == "true" ]; then
+            echo "Published @retainr/n8n-nodes-retainr@${{ steps.version-check.outputs.package }} to npm with provenance"
+          else
+            echo "Skipped — v${{ steps.version-check.outputs.package }} already on npm"
+          fi
