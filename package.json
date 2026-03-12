@@ -1,6 +1,6 @@
 {
   "name": "@retainr/n8n-nodes-retainr",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "n8n community node for retainr.dev — AI agent memory persistence API",
   "license": "MIT",
   "author": {
