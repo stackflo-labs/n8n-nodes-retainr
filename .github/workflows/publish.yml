@@ -59,7 +59,7 @@ jobs:
       - name: Summary
         run: |
           if [ "${{ steps.version-check.outputs.should_publish }}" == "true" ]; then
-            echo "Published @retainr/n8n-nodes-retainr@${{ steps.version-check.outputs.package }} to npm with provenance"
+            echo "Published @stackflo-labs/n8n-nodes-retainr@${{ steps.version-check.outputs.package }} to npm with provenance"
           else
             echo "Skipped — v${{ steps.version-check.outputs.package }} already on npm"
           fi
