@@ -1,6 +1,11 @@
 {
   "name": "@retainr/n8n-nodes-retainr",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sebastianstupak/stackflo.git",
+    "directory": "packages/n8n-node"
+  },
   "description": "n8n community node for retainr.dev — AI agent memory persistence API",
   "license": "MIT",
   "author": {
