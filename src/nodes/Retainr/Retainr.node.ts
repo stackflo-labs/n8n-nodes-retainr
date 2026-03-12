@@ -466,14 +466,14 @@ export class Retainr implements INodeType {
 						description: 'Filter by agent ID',
 					},
 					{
-						displayName: 'Limit',
-						name: 'limit',
+						displayName: 'Max Memories',
+						name: 'maxMemories',
 						type: 'number',
 						typeOptions: {
 							minValue: 1,
 						},
-						default: 50,
-						description: 'Max number of results to return',
+						default: 5,
+						description: 'Maximum number of memories to include in the context (API max 20)',
 					},
 					{
 						displayName: 'Namespace',
@@ -691,11 +691,11 @@ export class Retainr implements INodeType {
 
 		const resource = this.getNodeParameter('resource', 0) as string;
 		const operation = this.getNodeParameter('operation', 0) as string;
+		const credentials = await this.getCredentials('retainrApi');
+		const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				const credentials = await this.getCredentials('retainrApi');
-				const baseUrl = (credentials.baseUrl as string).replace(/\/+$/, '');
 
 				let responseData: IDataObject;
 
@@ -883,7 +883,7 @@ async function getContext(
 	if (additional.agentId) body.agent_id = additional.agentId;
 	if (additional.namespace) body.namespace = additional.namespace;
 	if (additional.tags) body.tags = parseTags(additional.tags as string);
-	if (additional.limit) body.limit = additional.limit;
+	if (additional.maxMemories) body.limit = additional.maxMemories;
 	if (additional.threshold) body.threshold = additional.threshold;
 
 	return apiRequest.call(this, 'POST', baseUrl, '/v1/memories/context', body);
