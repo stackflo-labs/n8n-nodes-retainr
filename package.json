@@ -1,0 +1,41 @@
+{
+  "name": "@retainr/n8n-nodes-retainr",
+  "version": "0.1.0",
+  "description": "n8n community node for retainr.dev — AI agent memory persistence API",
+  "license": "MIT",
+  "author": {
+    "name": "retainr.dev"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/RetainrApi.credentials.js"
+    ],
+    "nodes": []
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "pnpm build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "retainr",
+    "ai-memory",
+    "agent-memory"
+  ],
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "devDependencies": {
+    "n8n-workflow": "^1.0.0",
+    "typescript": "^5.0.0"
+  }
+}
