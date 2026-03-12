@@ -1,28 +1,34 @@
 {
   "name": "@stackflo-labs/n8n-nodes-retainr",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stackflo-labs/n8n-nodes-retainr.git"
   },
-  "description": "n8n community node for retainr.dev — AI agent memory persistence API",
+  "description": "n8n community node for retainr.dev — AI agent memory persistence API. Store, search, and retrieve semantic memories for AI agents across workflow runs.",
   "license": "MIT",
   "author": {
-    "name": "retainr.dev"
+    "name": "stackflo-labs",
+    "url": "https://retainr.dev"
   },
+  "homepage": "https://github.com/stackflo-labs/n8n-nodes-retainr",
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [
       "dist/credentials/RetainrApi.credentials.js"
     ],
-    "nodes": []
+    "nodes": [
+      "dist/nodes/Retainr/Retainr.node.js"
+    ]
   },
-  "main": "dist/index.js",
+  "main": "dist/nodes/Retainr/Retainr.node.js",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc"
+    "build": "tsc && copyfiles -u 1 \"src/**/*.svg\" dist",
+    "lint": "npx @n8n/scan-community-package @stackflo-labs/n8n-nodes-retainr",
+    "clean": "rimraf dist"
   },
   "publishConfig": {
     "access": "public"
@@ -32,13 +38,18 @@
     "n8n",
     "retainr",
     "ai-memory",
-    "agent-memory"
+    "agent-memory",
+    "vector-search",
+    "semantic-memory",
+    "llm",
+    "ai-agent"
   ],
   "peerDependencies": {
-    "n8n-workflow": "*"
+    "n8n-workflow": ">=1.0.0"
   },
   "devDependencies": {
-    "n8n-workflow": "^1.0.0",
-    "typescript": "^5.0.0"
+    "copyfiles": "^2.4.1",
+    "n8n-workflow": "^1.70.0",
+    "typescript": "^5.7.0"
   }
 }
