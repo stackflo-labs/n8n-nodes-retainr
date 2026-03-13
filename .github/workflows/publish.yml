@@ -10,56 +10,44 @@ jobs:
   publish:
     name: Publish to npm
     runs-on: ubuntu-latest
-    environment: npm
     permissions:
-      contents: read
-      id-token: write
+      id-token: write  # required for OIDC trusted publishing
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Ensure npm 11.5.1+ for trusted publishing
-        run: npm install -g npm@latest
-
-      - name: Configure npm registry (OIDC handles auth)
-        run: echo "registry=https://registry.npmjs.org/" > ~/.npmrc
-
-      - name: Check if version is new
+      - name: Check if version already published
         id: version-check
         run: |
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
-          PACKAGE_VERSION=$(node -p "require('./package.json').version")
-          NPM_VERSION=$(npm view "$PACKAGE_NAME" version 2>/dev/null || echo "0.0.0")
-          echo "package=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "published=$NPM_VERSION" >> "$GITHUB_OUTPUT"
-          if [ "$PACKAGE_VERSION" != "$NPM_VERSION" ]; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "New version detected: $PACKAGE_VERSION (npm has $NPM_VERSION)"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "Package version: ${PKG_VERSION}"
+          PUBLISHED=$(npm view @stackflo-labs/n8n-nodes-retainr@${PKG_VERSION} version 2>/dev/null || true)
+          if [ -n "$PUBLISHED" ]; then
+            echo "Version ${PKG_VERSION} already on npm — skipping"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
           else
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "Version $PACKAGE_VERSION already published — skipping"
+            echo "New version ${PKG_VERSION} — publishing"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "version=${PKG_VERSION}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install dependencies
-        if: steps.version-check.outputs.should_publish == 'true'
-        run: npm install
+      - name: Install and build
+        if: steps.version-check.outputs.skip == 'false'
+        run: npm ci && npm run build
 
-      - name: Build
-        if: steps.version-check.outputs.should_publish == 'true'
-        run: npm run build
-
-      - name: Publish to npm (OIDC trusted publishing + provenance)
-        if: steps.version-check.outputs.should_publish == 'true'
-        run: npm publish --access public --provenance
+      - name: Publish to npm
+        if: steps.version-check.outputs.skip == 'false'
+        run: npm publish --provenance --access public
 
       - name: Summary
+        if: always()
         run: |
-          if [ "${{ steps.version-check.outputs.should_publish }}" == "true" ]; then
-            echo "Published @stackflo-labs/n8n-nodes-retainr@${{ steps.version-check.outputs.package }} to npm with provenance"
+          if [ "${{ steps.version-check.outputs.skip }}" = "true" ]; then
+            echo "### ⏭ Skipped — version already on npm" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Skipped — v${{ steps.version-check.outputs.package }} already on npm"
+            echo "### ✅ Published @stackflo-labs/n8n-nodes-retainr@${{ steps.version-check.outputs.version }}" >> "$GITHUB_STEP_SUMMARY"
           fi
