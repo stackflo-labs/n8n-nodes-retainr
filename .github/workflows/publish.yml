@@ -44,8 +44,11 @@ jobs:
       - name: Publish to npm
         if: steps.version-check.outputs.skip == 'false'
         run: |
-          npm config delete //registry.npmjs.org/:_authToken
-          npm publish --provenance --access public
+          npm publish --provenance --access public || {
+            echo "--- npm debug log ---"
+            cat /home/runner/.npm/_logs/*.log 2>/dev/null | tail -80
+            exit 1
+          }
 
       - name: Summary
         if: always()
