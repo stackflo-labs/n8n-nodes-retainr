@@ -12,13 +12,13 @@
  * Usage:
  *   N8N_BASE_URL=http://localhost:5678 \
  *   RETAINR_API_KEY=rec_live_... \
- *   RETAINR_API_URL=https://staging.api.retainr.dev \
+ *   RETAINR_API_URL=https://api-staging.retainr.dev \
  *   node e2e/integration-test.mjs
  */
 
 const N8N_BASE_URL = process.env.N8N_BASE_URL ?? 'http://localhost:5678'
 const RETAINR_API_KEY = process.env.RETAINR_API_KEY ?? ''
-const RETAINR_API_URL = process.env.RETAINR_API_URL ?? 'https://staging.api.retainr.dev'
+const RETAINR_API_URL = process.env.RETAINR_API_URL ?? 'https://api-staging.retainr.dev'
 // When n8n runs in Docker, it may need a different URL to reach the Retainr API.
 const RETAINR_API_URL_FROM_N8N = process.env.RETAINR_API_URL_FROM_N8N ?? RETAINR_API_URL
 
