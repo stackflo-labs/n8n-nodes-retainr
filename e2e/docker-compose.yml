@@ -1,0 +1,37 @@
+# E2E test stack for the Retainr n8n community node.
+#
+# Usage:
+#   cd packages/n8n-node
+#   docker compose -f e2e/docker-compose.yml up --build -d
+#   node e2e/integration-test.mjs
+#   docker compose -f e2e/docker-compose.yml down
+#
+# Environment variables (override via .env or shell):
+#   RETAINR_API_KEY        — Required. Your retainr.dev API key (rec_live_...)
+#   RETAINR_API_URL        — Default: https://staging.api.retainr.dev
+#   N8N_PORT               — Default: 5678
+
+services:
+  n8n:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.n8n
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      - N8N_USER_MANAGEMENT_JWT_SECRET=e2e-test-jwt-secret
+      - N8N_ENCRYPTION_KEY=e2e-test-encryption-key
+      - N8N_COMMUNITY_PACKAGES_ENABLED=true
+      - DB_TYPE=sqlite
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - N8N_TEMPLATES_ENABLED=false
+      - N8N_HIDE_USAGE_PAGE=true
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/rest/settings || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s

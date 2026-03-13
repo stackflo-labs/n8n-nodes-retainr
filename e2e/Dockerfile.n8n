@@ -1,0 +1,58 @@
+# Production-faithful n8n + Retainr community node image.
+# Uses npm pack + tarball install — the exact same install path
+# that n8n Cloud, Desktop, and self-hosted users follow.
+#
+# Build:
+#   docker build -f e2e/Dockerfile.n8n -t n8n-retainr-e2e .
+#
+# The build context is packages/n8n-node/ (one level up from this file).
+
+FROM node:20-slim AS builder
+
+WORKDIR /build
+
+# Copy manifests first so Docker cache is invalidated only when deps change
+COPY package.json package-lock.json tsconfig.json ./
+COPY src/ src/
+
+# Install build deps (including n8n-workflow peer for typechecking)
+# Use ci for reproducible install; --ignore-scripts skips unnecessary lifecycle hooks
+RUN npm ci --ignore-scripts
+
+# Compile TypeScript + copy SVGs
+RUN npx tsc && npx copyfiles -u 1 "src/**/*.svg" dist
+
+# Pack into tarball — produces stackflo-labs-n8n-nodes-retainr-*.tgz
+RUN npm pack
+
+# ── Final n8n image ──────────────────────────────────────────────────────────
+
+FROM n8nio/n8n:latest
+
+USER root
+
+# Copy the tarball from builder
+COPY --from=builder /build/stackflo-labs-n8n-nodes-retainr-*.tgz /tmp/
+
+# Install the community node from tarball into n8n's community packages dir.
+# This is the exact same mechanism n8n uses when you click "Install" in the UI.
+RUN mkdir -p /home/node/.n8n/nodes && \
+    cd /home/node/.n8n/nodes && \
+    npm init -y > /dev/null 2>&1 && \
+    npm install /tmp/stackflo-labs-n8n-nodes-retainr-*.tgz --save && \
+    rm /tmp/stackflo-labs-n8n-nodes-retainr-*.tgz && \
+    chown -R node:node /home/node/.n8n
+
+USER node
+
+# n8n config for CI/testing
+ENV N8N_COMMUNITY_PACKAGES_ENABLED=true \
+    N8N_DIAGNOSTICS_ENABLED=false \
+    N8N_VERSION_NOTIFICATIONS_ENABLED=false \
+    N8N_TEMPLATES_ENABLED=false \
+    N8N_HIDE_USAGE_PAGE=true \
+    DB_TYPE=sqlite \
+    EXECUTIONS_DATA_SAVE_ON_SUCCESS=all \
+    EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+
+EXPOSE 5678
