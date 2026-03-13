@@ -44,7 +44,7 @@ jobs:
       - name: Publish to npm
         if: steps.version-check.outputs.skip == 'false'
         run: |
-          unset NODE_AUTH_TOKEN NPM_CONFIG_USERCONFIG
+          npm config delete //registry.npmjs.org/:_authToken
           npm publish --provenance --access public
 
       - name: Summary
