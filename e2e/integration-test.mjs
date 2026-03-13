@@ -204,6 +204,7 @@ async function phase1NodeLoading(auth) {
     (n) => n.name === 'n8n-nodes-retainr.retainr' || n.name === '@stackflo-labs/n8n-nodes-retainr.retainr',
   )
   assert(retainrNode != null, 'Retainr node is registered in n8n')
+  console.log(`   Registered node type name: ${retainrNode?.name}`)
   assert(
     retainrNode?.displayName === 'Retainr',
     'Retainr node displayName is "Retainr"',
@@ -216,6 +217,7 @@ async function phase1NodeLoading(auth) {
   }
 
   console.log()
+  return retainrNode?.name
 }
 
 // ── Phase 2: Workflow execution ──────────────────────────────────────────────
@@ -245,7 +247,7 @@ async function createCredential(auth) {
   return { id: String(cred.id), name: cred.name }
 }
 
-function buildWorkflow(name, retainrParams, credential) {
+function buildWorkflow(name, retainrParams, credential, nodeType = 'n8n-nodes-retainr.retainr') {
   const triggerName = 'Manual Trigger'
   return {
     name,
@@ -261,7 +263,7 @@ function buildWorkflow(name, retainrParams, credential) {
       {
         id: crypto.randomUUID(),
         name: 'Retainr',
-        type: 'n8n-nodes-retainr.retainr',
+        type: nodeType,
         typeVersion: 1,
         position: [500, 300],
         parameters: retainrParams,
@@ -352,8 +354,8 @@ async function cleanupWorkflow(auth, workflowId) {
   try { await n8nFetch(auth, `/rest/workflows/${workflowId}`, { method: 'DELETE' }) } catch {}
 }
 
-async function runWorkflowTest(auth, name, params, credential) {
-  const wf = buildWorkflow(name, params, credential)
+async function runWorkflowTest(auth, name, params, credential, nodeType) {
+  const wf = buildWorkflow(name, params, credential, nodeType)
   const created = await createWorkflow(auth, wf)
   try {
     const exec = await executeWorkflow(auth, created.id)
@@ -376,7 +378,7 @@ async function runWorkflowTest(auth, name, params, credential) {
   }
 }
 
-async function phase2WorkflowExecution(auth) {
+async function phase2WorkflowExecution(auth, nodeType) {
   console.log('=== Phase 2: Workflow execution via n8n engine ===\n')
 
   const credential = await createCredential(auth)
@@ -394,7 +396,7 @@ async function phase2WorkflowExecution(auth) {
     scope: 'user',
     userId: testUserId,
     storeAdditionalFields: { ttlSeconds: TEST_TTL, tags: 'e2e-test' },
-  }, credential)
+  }, credential, nodeType)
   if (storeOutput) {
     pass(`Store returned memory id: ${storeOutput.id ?? 'ok'}`)
   }
@@ -414,7 +416,7 @@ async function phase2WorkflowExecution(auth) {
       limit: 5,
       threshold: 0.3,
     },
-  }, credential)
+  }, credential, nodeType)
   if (searchOutput) {
     const results = searchOutput.results ?? searchOutput.memories ?? []
     pass(`Search returned ${Array.isArray(results) ? results.length : '?'} results`)
@@ -432,7 +434,7 @@ async function phase2WorkflowExecution(auth) {
       userId: testUserId,
       maxMemories: 5,
     },
-  }, credential)
+  }, credential, nodeType)
   if (contextOutput) {
     const ctx = contextOutput.context ?? ''
     pass(`Get Context returned ${ctx.length} chars`)
@@ -448,7 +450,7 @@ async function phase2WorkflowExecution(auth) {
       userId: testUserId,
       limit: 10,
     },
-  }, credential)
+  }, credential, nodeType)
   if (listOutput) {
     const memories = listOutput.memories ?? []
     pass(`List returned ${Array.isArray(memories) ? memories.length : '?'} memories`)
@@ -459,7 +461,7 @@ async function phase2WorkflowExecution(auth) {
   const wsOutput = await runWorkflowTest(auth, 'CI: Workspace Info', {
     resource: 'workspace',
     operation: 'getInfo',
-  }, credential)
+  }, credential, nodeType)
   if (wsOutput) {
     assert(wsOutput.workspace_id != null || wsOutput.id != null,
       'Workspace info returned workspace data',
@@ -473,7 +475,7 @@ async function phase2WorkflowExecution(auth) {
     operation: 'delete',
     deleteScope: 'user',
     deleteAdditionalFields: { userId: testUserId },
-  }, credential)
+  }, credential, nodeType)
   if (deleteOutput) {
     pass(`Delete returned: ${JSON.stringify(deleteOutput).slice(0, 100)}`)
   }
@@ -599,9 +601,10 @@ async function main() {
     auth = await signIn()
   }
 
-  // Phase 1: Always run — verifies node loads
+  // Phase 1: Always run — verifies node loads, returns actual registered type name
+  let registeredNodeType = 'n8n-nodes-retainr.retainr'
   try {
-    await phase1NodeLoading(auth)
+    registeredNodeType = (await phase1NodeLoading(auth)) ?? registeredNodeType
   } catch (e) {
     console.error(`Phase 1 FAILED: ${e.message}\n`)
   }
@@ -611,7 +614,7 @@ async function main() {
     console.log('⚠  RETAINR_API_KEY not set — skipping Phase 2 (workflow execution) and Phase 3 (API validation)\n')
   } else {
     try {
-      await phase2WorkflowExecution(auth)
+      await phase2WorkflowExecution(auth, registeredNodeType)
     } catch (e) {
       console.error(`Phase 2 FAILED: ${e.message}\n`)
     }
