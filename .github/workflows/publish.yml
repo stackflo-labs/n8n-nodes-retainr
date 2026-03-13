@@ -44,7 +44,15 @@ jobs:
       - name: Publish to npm
         if: steps.version-check.outputs.skip == 'false'
         run: |
-          echo "npm whoami: $(npm whoami 2>&1 || echo 'not logged in')"
+          echo "--- Manual OIDC exchange test ---"
+          OIDC_TOKEN=$(curl -sf \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://registry.npmjs.org/" \
+            | jq -r .value)
+          EXCHANGE=$(curl -s -X POST https://registry.npmjs.org/-/v1/login/oidc/token \
+            -H "Content-Type: application/json" \
+            -d "{\"oidcToken\":\"$OIDC_TOKEN\"}")
+          echo "Exchange response: $EXCHANGE"
           npm publish --provenance --access public
 
       - name: Summary
