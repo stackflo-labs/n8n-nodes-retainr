@@ -45,11 +45,14 @@ jobs:
         if: steps.version-check.outputs.skip == 'false'
         run: |
           echo "npm version: $(npm --version)"
-          echo "node version: $(node --version)"
           echo "ACTIONS_ID_TOKEN_REQUEST_URL set: $( [ -n "$ACTIONS_ID_TOKEN_REQUEST_URL" ] && echo yes || echo no )"
           echo "NODE_AUTH_TOKEN set: $( [ -n "$NODE_AUTH_TOKEN" ] && echo yes || echo no )"
-          cat ~/.npmrc 2>/dev/null || echo "no ~/.npmrc"
-          cat .npmrc 2>/dev/null || echo "no .npmrc"
+          echo "NPM_CONFIG_USERCONFIG: $NPM_CONFIG_USERCONFIG"
+          cat "$NPM_CONFIG_USERCONFIG" 2>/dev/null || echo "no npmrc at config path"
+          echo "--- OIDC token claims ---"
+          OIDC_TOKEN=$(curl -sf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://registry.npmjs.org/" | jq -r .value)
+          echo "$OIDC_TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | python3 -m json.tool || echo "could not decode"
 
       - name: Publish to npm
         if: steps.version-check.outputs.skip == 'false'
