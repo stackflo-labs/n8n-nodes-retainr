@@ -13,14 +13,15 @@ WORKDIR /build
 
 # Copy manifests first so Docker cache is invalidated only when deps change
 COPY package.json package-lock.json tsconfig.json ./
-COPY src/ src/
+COPY credentials/ credentials/
+COPY nodes/ nodes/
 
 # Install build deps (including n8n-workflow peer for typechecking)
 # Use ci for reproducible install; --ignore-scripts skips unnecessary lifecycle hooks
 RUN npm ci --ignore-scripts
 
 # Compile TypeScript + copy SVGs
-RUN npx tsc && npx copyfiles -u 1 "src/**/*.svg" dist
+RUN npx tsc && npx copyfiles -u 0 "nodes/**/*.svg" dist
 
 # Pack into tarball — produces stackflo-labs-n8n-nodes-retainr-*.tgz
 RUN npm pack
