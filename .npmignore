@@ -1,0 +1,13 @@
+# Exclude compiled test files from the published package.
+# The scanner (npx @n8n/scan-community-package) lints everything in dist/,
+# and test files use jest globals that fail the no-restricted-globals rule.
+dist/**/__tests__/**
+dist/**/__mocks__/**
+
+# Source and dev files
+src/
+*.test.ts
+*.spec.ts
+jest.config.cjs
+e2e/
+coverage/

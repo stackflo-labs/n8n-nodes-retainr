@@ -1,6 +1,6 @@
 {
   "name": "@stackflo-labs/n8n-nodes-retainr",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stackflo-labs/n8n-nodes-retainr.git"
@@ -23,7 +23,10 @@
   },
   "main": "dist/nodes/Retainr/Retainr.node.js",
   "files": [
-    "dist"
+    "dist/credentials",
+    "dist/nodes/Retainr/Retainr.node.js",
+    "dist/nodes/Retainr/Retainr.node.d.ts",
+    "dist/nodes/Retainr/retainr.svg"
   ],
   "scripts": {
     "build": "tsc && copyfiles -u 1 \"src/**/*.svg\" dist",
