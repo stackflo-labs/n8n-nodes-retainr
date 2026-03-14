@@ -30,7 +30,7 @@
     "dist/nodes/Retainr/retainr.svg"
   ],
   "scripts": {
-    "build": "tsc && copyfiles -u 1 \"src/**/*.svg\" dist",
+    "build": "tsc && copyfiles -u 0 \"nodes/**/*.svg\" dist",
     "lint": "npx @n8n/scan-community-package @stackflo-labs/n8n-nodes-retainr",
     "clean": "rimraf dist",
     "test": "jest",

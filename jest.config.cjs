@@ -2,13 +2,13 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
+  roots: ['<rootDir>/nodes', '<rootDir>/credentials'],
   testMatch: ['**/__tests__/**/*.test.ts'],
-  collectCoverageFrom: ['src/**/*.ts', '!src/**/__tests__/**', '!src/__mocks__/**'],
+  collectCoverageFrom: ['nodes/**/*.ts', 'credentials/**/*.ts', '!**/__tests__/**', '!__mocks__/**'],
   coverageThreshold: {
     global: { lines: 80 },
   },
   moduleNameMapper: {
-    'isolated-vm': '<rootDir>/src/__mocks__/isolated-vm.js',
+    'isolated-vm': '<rootDir>/__mocks__/isolated-vm.js',
   },
 };
