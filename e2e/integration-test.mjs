@@ -21,6 +21,8 @@ const RETAINR_API_KEY = process.env.RETAINR_API_KEY ?? ''
 const RETAINR_API_URL = process.env.RETAINR_API_URL ?? 'https://api-staging.retainr.dev'
 // When n8n runs in Docker, it may need a different URL to reach the Retainr API.
 const RETAINR_API_URL_FROM_N8N = process.env.RETAINR_API_URL_FROM_N8N ?? RETAINR_API_URL
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET ?? ''
+const INTERNAL_API_URL = process.env.INTERNAL_API_URL ?? RETAINR_API_URL
 
 const OWNER_EMAIL = 'ci@retainr-test.internal'
 const OWNER_PASSWORD = 'RetainrCI-2024!'
@@ -172,6 +174,17 @@ async function retainrFetch(path, options = {}) {
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${RETAINR_API_KEY}`,
+      ...(options.headers ?? {}),
+    },
+  })
+}
+
+async function internalFetch(path, options = {}) {
+  return fetch(`${INTERNAL_API_URL}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${INTERNAL_API_SECRET}`,
       ...(options.headers ?? {}),
     },
   })
@@ -580,6 +593,161 @@ async function phase3DirectApi() {
   console.log()
 }
 
+// ── Phase 4: Analytics validation ───────────────────────────────────────────
+
+async function phase4Analytics() {
+  console.log('=== Phase 4: Analytics validation ===\n')
+
+  // Get workspace_id for internal API calls
+  const wsRes = await retainrFetch('/v1/workspace')
+  assert(wsRes.ok, 'Workspace lookup for analytics phase', `got ${wsRes.status}`)
+  const wsData = await wsRes.json()
+  const workspaceId = wsData.workspace_id ?? wsData.id
+  assert(workspaceId != null, 'Got workspace_id for analytics', `got: ${JSON.stringify(wsData).slice(0, 100)}`)
+  console.log(`   Workspace ID: ${workspaceId}\n`)
+
+  // ── 4a: Store 3 memories + search to generate retrieval data ──────────
+  console.log('--- 4a: Generate retrieval data ---\n')
+  const ts = Date.now()
+  const analyticsUserId = `e2e-analytics-${ts}`
+
+  for (let i = 1; i <= 3; i++) {
+    const r = await retainrFetch('/v1/memories', {
+      method: 'POST',
+      body: JSON.stringify({
+        content: `Analytics e2e memory ${i} at ${ts}`,
+        scope: 'user',
+        user_id: analyticsUserId,
+        ttl_seconds: TEST_TTL,
+      }),
+    })
+    assert(r.ok, `Store memory ${i} for analytics`, `got ${r.status}`)
+  }
+  pass('Stored 3 memories for analytics test')
+
+  await sleep(2000) // embedding settle
+
+  // Search (triggers retrieval logging)
+  const searchR = await retainrFetch('/v1/memories/search', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: `Analytics e2e memory at ${ts}`,
+      scope: 'user',
+      user_id: analyticsUserId,
+      limit: 5,
+      threshold: 0.3,
+    }),
+  })
+  assert(searchR.ok, 'Search for retrieval logging', `got ${searchR.status}`)
+  const searchData = await searchR.json()
+  const searchResults = searchData.results ?? searchData.memories ?? []
+  pass(`Search returned ${searchResults.length} results (retrieval logged)`)
+
+  // Context (also triggers retrieval logging)
+  const ctxR = await retainrFetch('/v1/memories/context', {
+    method: 'POST',
+    body: JSON.stringify({
+      query: `Analytics e2e memory at ${ts}`,
+      scope: 'user',
+      user_id: analyticsUserId,
+      limit: 5,
+    }),
+  })
+  assert(ctxR.ok, 'Context for retrieval logging', `got ${ctxR.status}`)
+  pass('Context called (retrieval logged)')
+
+  // ── 4b: Trigger analytics rollup ──────────────────────────────────────
+  console.log('\n--- 4b: Trigger analytics rollup ---\n')
+  const rollupRes = await internalFetch(`/internal/v1/analytics/rollup?workspace_id=${workspaceId}`, {
+    method: 'POST',
+  })
+  assert(rollupRes.status === 204, 'Analytics rollup trigger returns 204', `got ${rollupRes.status}`)
+  pass('Analytics rollup triggered successfully')
+
+  await sleep(500) // let rollup complete
+
+  // ── 4c: Analytics overview — returns JSON array ────────────────────────
+  console.log('\n--- 4c: Analytics overview ---\n')
+  const overviewRes = await internalFetch(`/internal/v1/analytics/overview?workspace_id=${workspaceId}&days=30`)
+  assert(overviewRes.ok, 'Analytics overview returns 2xx', `got ${overviewRes.status}`)
+  const overviewData = await overviewRes.json()
+  assert(Array.isArray(overviewData), 'Analytics overview returns JSON array', `got ${typeof overviewData}`)
+  pass(`Analytics overview returned ${overviewData.length} rows`)
+
+  // Verify row structure if we have data
+  if (overviewData.length > 0) {
+    const row = overviewData[0]
+    assert('date' in row, 'Overview row has date field')
+    assert('memories_added' in row, 'Overview row has memories_added field')
+    assert('memories_deleted' in row, 'Overview row has memories_deleted field')
+    assert('retrievals' in row, 'Overview row has retrievals field')
+    assert('namespace' in row, 'Overview row has namespace field')
+    pass(`Sample row: date=${row.date}, added=${row.memories_added}, retrievals=${row.retrievals}`)
+  }
+
+  // ── 4d: Analytics overview with days=7 filter ─────────────────────────
+  console.log('\n--- 4d: Analytics overview with days=7 ---\n')
+  const overview7Res = await internalFetch(`/internal/v1/analytics/overview?workspace_id=${workspaceId}&days=7`)
+  assert(overview7Res.ok, 'Analytics overview days=7 returns 2xx', `got ${overview7Res.status}`)
+  const overview7Data = await overview7Res.json()
+  assert(Array.isArray(overview7Data), 'Analytics overview days=7 returns array', `got ${typeof overview7Data}`)
+  pass(`Analytics overview (7d) returned ${overview7Data.length} rows`)
+
+  // ── 4e: Analytics export — returns CSV ────────────────────────────────
+  console.log('\n--- 4e: Analytics export (CSV) ---\n')
+  const exportRes = await internalFetch(`/internal/v1/analytics/export?workspace_id=${workspaceId}&days=30`)
+  assert(exportRes.ok, 'Analytics export returns 2xx', `got ${exportRes.status}`)
+  const contentType = exportRes.headers.get('content-type') ?? ''
+  assert(contentType.includes('text/csv'), 'Analytics export Content-Type is text/csv', `got ${contentType}`)
+  const contentDisp = exportRes.headers.get('content-disposition') ?? ''
+  assert(contentDisp.includes('analytics.csv'), 'Analytics export Content-Disposition includes filename', `got ${contentDisp}`)
+  const csvText = await exportRes.text()
+  const csvLines = csvText.trim().split('\n')
+  assert(csvLines.length >= 1, 'CSV has at least header row', `got ${csvLines.length} lines`)
+  const header = csvLines[0]
+  assert(header.includes('date'), 'CSV header has date column', `got: ${header}`)
+  assert(header.includes('memories_added'), 'CSV header has memories_added column', `got: ${header}`)
+  assert(header.includes('retrievals'), 'CSV header has retrievals column', `got: ${header}`)
+  pass(`CSV export: ${csvLines.length} lines (including header)`)
+
+  // ── 4f: Analytics overview rejects missing workspace_id ───────────────
+  console.log('\n--- 4f: Analytics overview requires workspace_id ---\n')
+  const noWsRes = await internalFetch('/internal/v1/analytics/overview?days=30')
+  assert(noWsRes.status === 400, 'Overview without workspace_id returns 400', `got ${noWsRes.status}`)
+  pass('Missing workspace_id correctly rejected with 400')
+
+  // ── 4g: Delete memories by date ───────────────────────────────────────
+  console.log('\n--- 4g: Delete memories by date ---\n')
+  // Delete all memories created before tomorrow (should delete our test memories)
+  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const deleteRes = await internalFetch(`/internal/v1/analytics/delete-memories?workspace_id=${workspaceId}`, {
+    method: 'POST',
+    body: JSON.stringify({ before: tomorrow }),
+  })
+  assert(deleteRes.status === 204, 'Delete memories returns 204', `got ${deleteRes.status}`)
+  pass(`Delete memories before ${tomorrow} succeeded`)
+
+  // Verify memories are gone
+  await sleep(300)
+  const verifyRes = await retainrFetch(`/v1/memories?scope=user&user_id=${analyticsUserId}&limit=10`)
+  if (verifyRes.ok) {
+    const verifyData = await verifyRes.json()
+    const remaining = verifyData.memories ?? []
+    assert(remaining.length === 0, 'Analytics test memories deleted', `${remaining.length} remain`)
+  }
+
+  // ── 4h: Delete memories rejects invalid date ──────────────────────────
+  console.log('\n--- 4h: Delete memories rejects invalid date ---\n')
+  const badDateRes = await internalFetch(`/internal/v1/analytics/delete-memories?workspace_id=${workspaceId}`, {
+    method: 'POST',
+    body: JSON.stringify({ before: 'not-a-date' }),
+  })
+  assert(badDateRes.status === 400, 'Delete with invalid date returns 400', `got ${badDateRes.status}`)
+  pass('Invalid date correctly rejected with 400')
+
+  console.log()
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -589,6 +757,7 @@ async function main() {
   console.log(`║  n8n:     ${N8N_BASE_URL.padEnd(38)} ║`)
   console.log(`║  API:     ${RETAINR_API_URL.padEnd(38)} ║`)
   console.log(`║  API key: ${RETAINR_API_KEY ? RETAINR_API_KEY.slice(0, 12) + '...' : '(not set)'}${' '.repeat(Math.max(0, 38 - (RETAINR_API_KEY ? 15 : 9)))} ║`)
+  console.log(`║  Secret:  ${INTERNAL_API_SECRET ? '(set)' : '(not set)'}${' '.repeat(Math.max(0, 38 - (INTERNAL_API_SECRET ? 5 : 9)))} ║`)
   console.log('╚══════════════════════════════════════════════════╝\n')
 
   await waitForN8n()
@@ -624,6 +793,16 @@ async function main() {
     } catch (e) {
       console.error(`Phase 3 FAILED: ${e.message}\n`)
     }
+  }
+
+  if (RETAINR_API_KEY && INTERNAL_API_SECRET) {
+    try {
+      await phase4Analytics()
+    } catch (e) {
+      console.error(`Phase 4 FAILED: ${e.message}\n`)
+    }
+  } else if (!INTERNAL_API_SECRET) {
+    console.log('⚠  INTERNAL_API_SECRET not set — skipping Phase 4 (analytics validation)\n')
   }
 
   // Summary
