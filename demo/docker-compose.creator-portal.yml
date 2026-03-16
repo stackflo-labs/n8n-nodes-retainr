@@ -1,0 +1,37 @@
+# n8n Creator Portal demo stack.
+# Uses the STOCK n8n image (no pre-installed node) so the recording shows
+# the real npm install flow that reviewers need to see.
+#
+# Usage:
+#   cd packages/n8n-node
+#   docker compose -f demo/docker-compose.creator-portal.yml up -d
+#   # wait ~20s for n8n to start
+#   cd ../../products/retainr/web
+#   RETAINR_API_KEY=rec_live_... node scripts/record-n8n-demo.mjs
+#   docker compose -f ../../packages/n8n-node/demo/docker-compose.creator-portal.yml down -v
+
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    ports:
+      - "5679:5678"
+    environment:
+      - N8N_USER_MANAGEMENT_JWT_SECRET=demo-jwt-secret-not-for-prod
+      - N8N_ENCRYPTION_KEY=demo-encryption-key-not-for-prod
+      - N8N_COMMUNITY_PACKAGES_ENABLED=true
+      - N8N_COMMUNITY_PACKAGES_ALLOW_UNLISTED=true
+      - DB_TYPE=sqlite
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - N8N_TEMPLATES_ENABLED=false
+      - N8N_HIDE_USAGE_PAGE=true
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+      - N8N_LOG_LEVEL=warn
+      - N8N_DEFAULT_LOCALE=en
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/rest/settings || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s

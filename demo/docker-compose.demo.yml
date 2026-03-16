@@ -1,0 +1,44 @@
+# Demo recording stack — n8n + retainr community node pre-installed.
+#
+# Usage:
+#   cd packages/n8n-node
+#   docker compose -f demo/docker-compose.demo.yml up --build -d
+#   # wait ~30s for n8n to start
+#   cd ../../products/retainr/web
+#   RETAINR_API_KEY=rec_live_... node scripts/record-n8n-demo.mjs
+#   docker compose -f ../../packages/n8n-node/demo/docker-compose.demo.yml down
+#
+# Port 5679 is used to avoid conflict with a local n8n dev instance on 5678.
+
+services:
+  n8n:
+    build:
+      context: ..
+      dockerfile: e2e/Dockerfile.n8n
+    ports:
+      - "5679:5678"
+    environment:
+      - N8N_USER_MANAGEMENT_JWT_SECRET=demo-jwt-secret-not-for-prod
+      - N8N_ENCRYPTION_KEY=demo-encryption-key-not-for-prod
+      - N8N_COMMUNITY_PACKAGES_ENABLED=true
+      - DB_TYPE=sqlite
+      - N8N_DIAGNOSTICS_ENABLED=false
+      - N8N_VERSION_NOTIFICATIONS_ENABLED=false
+      - N8N_TEMPLATES_ENABLED=false
+      - N8N_HIDE_USAGE_PAGE=true
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
+      - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
+      - N8N_LOG_LEVEL=info
+      - N8N_TUNNEL=true
+      - N8N_DEFAULT_LOCALE=en
+    volumes:
+      - n8n_demo_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/rest/settings || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+
+volumes:
+  n8n_demo_data:
