@@ -17,7 +17,7 @@ export class Retainr implements INodeType {
 		icon: 'file:retainr.svg',
 		group: ['transform'],
 		version: 1,
-		subtitle: '={{$parameter["operation"] + " " + $parameter["resource"]}}',
+		subtitle: '={{"getContext":"Get Context","store":"Store Memory","search":"Search Memories","list":"List Memories","delete":"Delete Memories","getUsage":"Get Usage"}[$parameter["operation"]] ?? $parameter["operation"]}}',
 		description: 'Store, search, and retrieve AI agent memories.',
 		defaults: {
 			name: 'Retainr',
