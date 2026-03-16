@@ -39,7 +39,10 @@
     "e2e": "node e2e/integration-test.mjs",
     "e2e:up": "docker compose -f e2e/docker-compose.yml up --build -d",
     "e2e:down": "docker compose -f e2e/docker-compose.yml down",
-    "e2e:run": "npm run e2e:up && npm run e2e -- && npm run e2e:down"
+    "e2e:run": "npm run e2e:up && npm run e2e -- && npm run e2e:down",
+    "demo:up": "docker compose -f demo/docker-compose.demo.yml up --build -d",
+    "demo:down": "docker compose -f demo/docker-compose.demo.yml down",
+    "demo:record": "npm run demo:up && cd ../../products/retainr/web && node scripts/record-n8n-demo.mjs"
   },
   "publishConfig": {
     "access": "public"

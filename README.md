@@ -72,6 +72,40 @@ Use the **Dedup Threshold** field (e.g., `0.95`) when storing. If a sufficiently
 
 This node has `usableAsTool` enabled — you can use it directly as a tool inside n8n's **AI Agent** node, letting the agent decide when to store or recall memories autonomously.
 
+## Demo Video
+
+A recorded demo covering all n8n Creator Portal requirements is at:
+
+```
+products/retainr/web/public/demo/n8n-demo.mp4
+```
+
+Full disk path (Windows): `D:\dev\datadir\stackflo\products\retainr\web\public\demo\n8n-demo.mp4`
+
+**To re-record** (e.g. after a node update):
+
+```bash
+# 1. Start n8n with the node pre-installed
+cd packages/n8n-node
+docker compose -f e2e/docker-compose.yml up --build -d
+
+# 2. Record — no API keys needed, the script handles everything
+cd ../../products/retainr/web
+N8N_BASE_URL=http://127.0.0.1:5678 \
+node scripts/record-n8n-demo.mjs
+# → public/demo/n8n-demo-raw.webm
+
+# 3. Post-process to MP4
+bash ../../packages/n8n-node/demo/post-process.sh public/demo/n8n-demo-raw.webm
+# → public/demo/n8n-demo.mp4
+
+# 4. Tear down
+cd ../../packages/n8n-node
+docker compose -f e2e/docker-compose.yml down
+```
+
+See `demo/README.md` for full details.
+
 ## API Documentation
 
 Full API reference: [retainr.dev/docs/api](https://retainr.dev/docs/api)
