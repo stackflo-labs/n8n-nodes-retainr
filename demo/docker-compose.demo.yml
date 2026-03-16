@@ -31,6 +31,10 @@ services:
       - N8N_LOG_LEVEL=info
       - N8N_TUNNEL=true
       - N8N_DEFAULT_LOCALE=en
+    extra_hosts:
+      # Allows n8n (inside Docker) to reach services on the host machine.
+      # Required for the mock OpenAI server (port 3100) used during demo recording.
+      - "host.docker.internal:host-gateway"
     volumes:
       - n8n_demo_data:/home/node/.n8n
     healthcheck:
