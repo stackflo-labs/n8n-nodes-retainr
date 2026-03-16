@@ -41,7 +41,6 @@ RUN mkdir -p /home/node/.n8n/nodes && \
     cd /home/node/.n8n/nodes && \
     npm init -y > /dev/null 2>&1 && \
     npm install /tmp/stackflo-labs-n8n-nodes-retainr-*.tgz --save && \
-    rm /tmp/stackflo-labs-n8n-nodes-retainr-*.tgz && \
     chown -R node:node /home/node/.n8n
 
 USER node
