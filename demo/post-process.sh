@@ -57,7 +57,7 @@ SUBTITLE_TEXT="Store and search memories across workflow runs"
 ESCAPED_FONT="${FONT_FILE//:/\\:}"
 
 VFILTER="\
-setpts=0.65*PTS,\
+setpts=1.0*PTS,\
 fade=t=in:st=0:d=${FADE_IN_END},\
 fade=t=out:st=${FADE_OUT_START}:d=1,\
 drawtext=fontfile='${ESCAPED_FONT}':text='retainr.dev':fontcolor=white@0.5:fontsize=14:x=w-140:y=h-35"

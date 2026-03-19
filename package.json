@@ -1,6 +1,6 @@
 {
   "name": "@stackflo-labs/n8n-nodes-retainr",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stackflo-labs/n8n-nodes-retainr.git"

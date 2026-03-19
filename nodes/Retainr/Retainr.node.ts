@@ -228,6 +228,22 @@ export class Retainr implements INodeType {
 				},
 			},
 			{
+				displayName: 'Namespace',
+				name: 'namespace',
+				type: 'string',
+				required: false,
+				default: '',
+				placeholder: 'acme-corp',
+				description:
+					'Namespace for organizing memories by customer or tenant (e.g., "acme-corp").',
+				displayOptions: {
+					show: {
+						resource: ['memory'],
+						operation: ['store'],
+					},
+				},
+			},
+			{
 				displayName: 'Additional Fields',
 				name: 'storeAdditionalFields',
 				type: 'collection',
@@ -258,13 +274,6 @@ export class Retainr implements INodeType {
 						type: 'json',
 						default: '{}',
 						description: 'Arbitrary key-value pairs as JSON object.',
-					},
-					{
-						displayName: 'Namespace',
-						name: 'namespace',
-						type: 'string',
-						default: '',
-						description: 'Free-form grouping label for organizing memories.',
 					},
 					{
 						displayName: 'Tags',
@@ -310,6 +319,21 @@ export class Retainr implements INodeType {
 				},
 			},
 			{
+				displayName: 'Namespace',
+				name: 'namespace',
+				type: 'string',
+				required: false,
+				default: '',
+				placeholder: 'acme-corp',
+				description: 'Filter memories by namespace.',
+				displayOptions: {
+					show: {
+						resource: ['memory'],
+						operation: ['search'],
+					},
+				},
+			},
+			{
 				displayName: 'Additional Fields',
 				name: 'searchAdditionalFields',
 				type: 'collection',
@@ -338,13 +362,6 @@ export class Retainr implements INodeType {
 						},
 						default: 50,
 						description: 'Max number of results to return.',
-					},
-					{
-						displayName: 'Namespace',
-						name: 'namespace',
-						type: 'string',
-						default: '',
-						description: 'Filter by namespace.',
 					},
 					{
 						displayName: 'Scope',
@@ -446,6 +463,21 @@ export class Retainr implements INodeType {
 				},
 			},
 			{
+				displayName: 'Namespace',
+				name: 'namespace',
+				type: 'string',
+				required: false,
+				default: '',
+				placeholder: 'acme-corp',
+				description: 'Filter memories by namespace.',
+				displayOptions: {
+					show: {
+						resource: ['memory'],
+						operation: ['getContext'],
+					},
+				},
+			},
+			{
 				displayName: 'Additional Fields',
 				name: 'contextAdditionalFields',
 				type: 'collection',
@@ -474,13 +506,6 @@ export class Retainr implements INodeType {
 						},
 						default: 5,
 						description: 'Maximum number of memories to include in the context (API max 20).',
-					},
-					{
-						displayName: 'Namespace',
-						name: 'namespace',
-						type: 'string',
-						default: '',
-						description: 'Filter by namespace.',
 					},
 					{
 						displayName: 'Scope',
@@ -534,6 +559,21 @@ export class Retainr implements INodeType {
 			//  Fields — Memory > List
 			// ==================================================================
 			{
+				displayName: 'Namespace',
+				name: 'namespace',
+				type: 'string',
+				required: false,
+				default: '',
+				placeholder: 'acme-corp',
+				description: 'Filter memories by namespace.',
+				displayOptions: {
+					show: {
+						resource: ['memory'],
+						operation: ['list'],
+					},
+				},
+			},
+			{
 				displayName: 'Additional Fields',
 				name: 'listAdditionalFields',
 				type: 'collection',
@@ -562,13 +602,6 @@ export class Retainr implements INodeType {
 						},
 						default: 50,
 						description: 'Max number of results to return.',
-					},
-					{
-						displayName: 'Namespace',
-						name: 'namespace',
-						type: 'string',
-						default: '',
-						description: 'Filter by namespace.',
 					},
 					{
 						displayName: 'Offset',
@@ -640,6 +673,21 @@ export class Retainr implements INodeType {
 				},
 			},
 			{
+				displayName: 'Namespace',
+				name: 'namespace',
+				type: 'string',
+				required: false,
+				default: '',
+				placeholder: 'acme-corp',
+				description: 'Filter memories by namespace.',
+				displayOptions: {
+					show: {
+						resource: ['memory'],
+						operation: ['delete'],
+					},
+				},
+			},
+			{
 				displayName: 'Additional Fields',
 				name: 'deleteAdditionalFields',
 				type: 'collection',
@@ -658,13 +706,6 @@ export class Retainr implements INodeType {
 						type: 'string',
 						default: '',
 						description: 'Filter by agent ID.',
-					},
-					{
-						displayName: 'Namespace',
-						name: 'namespace',
-						type: 'string',
-						default: '',
-						description: 'Filter by namespace.',
 					},
 					{
 						displayName: 'Session ID',
@@ -805,6 +846,7 @@ async function storeMemory(
 ): Promise<IDataObject> {
 	const content = this.getNodeParameter('content', i) as string;
 	const scope = this.getNodeParameter('scope', i) as string;
+	const namespace = this.getNodeParameter('namespace', i, '') as string;
 	const additional = this.getNodeParameter(
 		'storeAdditionalFields',
 		i,
@@ -821,8 +863,12 @@ async function storeMemory(
 		body.agent_id = this.getNodeParameter('agentId', i) as string;
 	}
 
-	// Optional fields
-	if (additional.namespace) body.namespace = additional.namespace;
+	// Namespace — top-level parameter takes priority, fall back to additional fields
+	if (namespace) {
+		body.namespace = namespace;
+	} else if (additional.namespace) {
+		body.namespace = additional.namespace;
+	}
 	if (additional.tags) body.tags = parseTags(additional.tags as string);
 	if (additional.ttlSeconds) body.ttl_seconds = additional.ttlSeconds;
 	if (additional.dedupThreshold) {
@@ -844,6 +890,7 @@ async function searchMemories(
 	baseUrl: string,
 ): Promise<IDataObject> {
 	const query = this.getNodeParameter('query', i) as string;
+	const namespace = this.getNodeParameter('namespace', i, '') as string;
 	const additional = this.getNodeParameter(
 		'searchAdditionalFields',
 		i,
@@ -855,7 +902,12 @@ async function searchMemories(
 	if (additional.sessionId) body.session_id = additional.sessionId;
 	if (additional.userId) body.user_id = additional.userId;
 	if (additional.agentId) body.agent_id = additional.agentId;
-	if (additional.namespace) body.namespace = additional.namespace;
+	// Namespace — top-level parameter takes priority, fall back to additional fields
+	if (namespace) {
+		body.namespace = namespace;
+	} else if (additional.namespace) {
+		body.namespace = additional.namespace;
+	}
 	if (additional.tags) body.tags = parseTags(additional.tags as string);
 	if (additional.limit) body.limit = additional.limit;
 	if (additional.threshold) body.threshold = additional.threshold;
@@ -870,6 +922,7 @@ async function getContext(
 ): Promise<IDataObject> {
 	const query = this.getNodeParameter('query', i) as string;
 	const format = this.getNodeParameter('format', i) as string;
+	const namespace = this.getNodeParameter('namespace', i, '') as string;
 	const additional = this.getNodeParameter(
 		'contextAdditionalFields',
 		i,
@@ -881,7 +934,12 @@ async function getContext(
 	if (additional.sessionId) body.session_id = additional.sessionId;
 	if (additional.userId) body.user_id = additional.userId;
 	if (additional.agentId) body.agent_id = additional.agentId;
-	if (additional.namespace) body.namespace = additional.namespace;
+	// Namespace — top-level parameter takes priority, fall back to additional fields
+	if (namespace) {
+		body.namespace = namespace;
+	} else if (additional.namespace) {
+		body.namespace = additional.namespace;
+	}
 	if (additional.tags) body.tags = parseTags(additional.tags as string);
 	if (additional.maxMemories) body.limit = additional.maxMemories;
 	if (additional.threshold) body.threshold = additional.threshold;
@@ -894,6 +952,7 @@ async function listMemories(
 	i: number,
 	baseUrl: string,
 ): Promise<IDataObject> {
+	const namespace = this.getNodeParameter('namespace', i, '') as string;
 	const additional = this.getNodeParameter(
 		'listAdditionalFields',
 		i,
@@ -905,7 +964,12 @@ async function listMemories(
 	if (additional.sessionId) qs.session_id = additional.sessionId;
 	if (additional.userId) qs.user_id = additional.userId;
 	if (additional.agentId) qs.agent_id = additional.agentId;
-	if (additional.namespace) qs.namespace = additional.namespace;
+	// Namespace — top-level parameter takes priority, fall back to additional fields
+	if (namespace) {
+		qs.namespace = namespace;
+	} else if (additional.namespace) {
+		qs.namespace = additional.namespace;
+	}
 	if (additional.tags) qs.tags = (additional.tags as string);
 	if (additional.limit) qs.limit = additional.limit;
 	if (additional.offset) qs.offset = additional.offset;
@@ -926,6 +990,7 @@ async function deleteMemories(
 	baseUrl: string,
 ): Promise<IDataObject> {
 	const scope = this.getNodeParameter('deleteScope', i) as string;
+	const namespace = this.getNodeParameter('namespace', i, '') as string;
 	const additional = this.getNodeParameter(
 		'deleteAdditionalFields',
 		i,
@@ -936,7 +1001,12 @@ async function deleteMemories(
 	if (additional.sessionId) body.session_id = additional.sessionId;
 	if (additional.userId) body.user_id = additional.userId;
 	if (additional.agentId) body.agent_id = additional.agentId;
-	if (additional.namespace) body.namespace = additional.namespace;
+	// Namespace — top-level parameter takes priority, fall back to additional fields
+	if (namespace) {
+		body.namespace = namespace;
+	} else if (additional.namespace) {
+		body.namespace = additional.namespace;
+	}
 
 	return apiRequest.call(this, 'DELETE', baseUrl, '/v1/memories', body);
 }
