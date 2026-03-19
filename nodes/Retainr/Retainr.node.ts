@@ -147,95 +147,13 @@ export class Retainr implements INodeType {
 				},
 			},
 			{
-				displayName: 'Scope',
-				name: 'scope',
-				type: 'options',
-				required: true,
-				default: 'user',
-				description: 'Memory visibility scope.',
-				options: [
-					{
-						name: 'Session',
-						value: 'session',
-						description: 'Scoped to a single workflow run.',
-					},
-					{
-						name: 'User',
-						value: 'user',
-						description: 'Persists across runs for one user.',
-					},
-					{
-						name: 'Agent',
-						value: 'agent',
-						description: 'Shared across users for one agent.',
-					},
-					{
-						name: 'Global',
-						value: 'global',
-						description: 'Shared across the entire workspace.',
-					},
-				],
-				displayOptions: {
-					show: {
-						resource: ['memory'],
-						operation: ['store'],
-					},
-				},
-			},
-			{
-				displayName: 'Session ID',
-				name: 'sessionId',
-				type: 'string',
-				default: '',
-				required: true,
-				description: 'Unique identifier for the session.',
-				displayOptions: {
-					show: {
-						resource: ['memory'],
-						operation: ['store'],
-						scope: ['session'],
-					},
-				},
-			},
-			{
-				displayName: 'User ID',
-				name: 'userId',
-				type: 'string',
-				default: '',
-				required: true,
-				description: 'Unique identifier for the user.',
-				displayOptions: {
-					show: {
-						resource: ['memory'],
-						operation: ['store'],
-						scope: ['user'],
-					},
-				},
-			},
-			{
-				displayName: 'Agent ID',
-				name: 'agentId',
-				type: 'string',
-				default: '',
-				required: true,
-				description: 'Unique identifier for the agent.',
-				displayOptions: {
-					show: {
-						resource: ['memory'],
-						operation: ['store'],
-						scope: ['agent'],
-					},
-				},
-			},
-			{
 				displayName: 'Namespace',
 				name: 'namespace',
 				type: 'string',
-				required: false,
 				default: '',
-				placeholder: 'sarah-chen-001',
+				placeholder: 'customer:alice',
 				description:
-					'Customer or tenant identifier within this workspace. Workspace is set by the API key; namespace groups memories per customer.',
+					'Group memories by any string. Leave empty for global scope.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
@@ -324,8 +242,9 @@ export class Retainr implements INodeType {
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'sarah-chen-001',
-				description: 'Filter by customer/tenant namespace within this workspace.',
+				placeholder: 'customer:alice',
+				description:
+					'Group memories by any string. Leave empty for global scope.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
@@ -347,13 +266,6 @@ export class Retainr implements INodeType {
 				},
 				options: [
 					{
-						displayName: 'Agent ID',
-						name: 'agentId',
-						type: 'string',
-						default: '',
-						description: 'Filter by agent ID.',
-					},
-					{
 						displayName: 'Limit',
 						name: 'limit',
 						type: 'number',
@@ -362,26 +274,6 @@ export class Retainr implements INodeType {
 						},
 						default: 50,
 						description: 'Max number of results to return.',
-					},
-					{
-						displayName: 'Scope',
-						name: 'scope',
-						type: 'options',
-						options: [
-							{ name: 'Session', value: 'session' },
-							{ name: 'User', value: 'user' },
-							{ name: 'Agent', value: 'agent' },
-							{ name: 'Global', value: 'global' },
-						],
-						default: 'user',
-						description: 'Filter by scope.',
-					},
-					{
-						displayName: 'Session ID',
-						name: 'sessionId',
-						type: 'string',
-						default: '',
-						description: 'Filter by session ID.',
 					},
 					{
 						displayName: 'Tags',
@@ -400,13 +292,6 @@ export class Retainr implements INodeType {
 						},
 						default: 0.5,
 						description: 'Minimum similarity threshold (0-1).',
-					},
-					{
-						displayName: 'User ID',
-						name: 'userId',
-						type: 'string',
-						default: '',
-						description: 'Filter by user ID.',
 					},
 				],
 			},
@@ -468,8 +353,9 @@ export class Retainr implements INodeType {
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'sarah-chen-001',
-				description: 'Filter by customer/tenant namespace within this workspace.',
+				placeholder: 'customer:alice',
+				description:
+					'Group memories by any string. Leave empty for global scope.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
@@ -491,13 +377,6 @@ export class Retainr implements INodeType {
 				},
 				options: [
 					{
-						displayName: 'Agent ID',
-						name: 'agentId',
-						type: 'string',
-						default: '',
-						description: 'Filter by agent ID.',
-					},
-					{
 						displayName: 'Max Memories',
 						name: 'maxMemories',
 						type: 'number',
@@ -506,26 +385,6 @@ export class Retainr implements INodeType {
 						},
 						default: 5,
 						description: 'Maximum number of memories to include in the context (API max 20).',
-					},
-					{
-						displayName: 'Scope',
-						name: 'scope',
-						type: 'options',
-						options: [
-							{ name: 'Session', value: 'session' },
-							{ name: 'User', value: 'user' },
-							{ name: 'Agent', value: 'agent' },
-							{ name: 'Global', value: 'global' },
-						],
-						default: 'user',
-						description: 'Filter by scope.',
-					},
-					{
-						displayName: 'Session ID',
-						name: 'sessionId',
-						type: 'string',
-						default: '',
-						description: 'Filter by session ID.',
 					},
 					{
 						displayName: 'Tags',
@@ -545,13 +404,6 @@ export class Retainr implements INodeType {
 						default: 0.35,
 						description: 'Minimum similarity threshold (0-1).',
 					},
-					{
-						displayName: 'User ID',
-						name: 'userId',
-						type: 'string',
-						default: '',
-						description: 'Filter by user ID.',
-					},
 				],
 			},
 
@@ -564,8 +416,9 @@ export class Retainr implements INodeType {
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'sarah-chen-001',
-				description: 'Filter by customer/tenant namespace within this workspace.',
+				placeholder: 'customer:alice',
+				description:
+					'Group memories by any string. Leave empty for global scope.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
@@ -587,13 +440,6 @@ export class Retainr implements INodeType {
 				},
 				options: [
 					{
-						displayName: 'Agent ID',
-						name: 'agentId',
-						type: 'string',
-						default: '',
-						description: 'Filter by agent ID.',
-					},
-					{
 						displayName: 'Limit',
 						name: 'limit',
 						type: 'number',
@@ -614,38 +460,11 @@ export class Retainr implements INodeType {
 						description: 'Pagination offset.',
 					},
 					{
-						displayName: 'Scope',
-						name: 'scope',
-						type: 'options',
-						options: [
-							{ name: 'Session', value: 'session' },
-							{ name: 'User', value: 'user' },
-							{ name: 'Agent', value: 'agent' },
-							{ name: 'Global', value: 'global' },
-						],
-						default: 'user',
-						description: 'Filter by scope.',
-					},
-					{
-						displayName: 'Session ID',
-						name: 'sessionId',
-						type: 'string',
-						default: '',
-						description: 'Filter by session ID.',
-					},
-					{
 						displayName: 'Tags',
 						name: 'tags',
 						type: 'string',
 						default: '',
 						description: 'Comma-separated list of tags to filter by.',
-					},
-					{
-						displayName: 'User ID',
-						name: 'userId',
-						type: 'string',
-						default: '',
-						description: 'Filter by user ID.',
 					},
 				],
 			},
@@ -654,74 +473,20 @@ export class Retainr implements INodeType {
 			//  Fields — Memory > Delete
 			// ==================================================================
 			{
-				displayName: 'Scope',
-				name: 'deleteScope',
-				type: 'options',
-				default: 'session',
-				description: 'Scope of memories to delete. At least one filter is required.',
-				options: [
-					{ name: 'Session', value: 'session' },
-					{ name: 'User', value: 'user' },
-					{ name: 'Agent', value: 'agent' },
-					{ name: 'Global', value: 'global' },
-				],
-				displayOptions: {
-					show: {
-						resource: ['memory'],
-						operation: ['delete'],
-					},
-				},
-			},
-			{
 				displayName: 'Namespace',
 				name: 'namespace',
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'sarah-chen-001',
-				description: 'Filter by customer/tenant namespace within this workspace.',
+				placeholder: 'customer:alice',
+				description:
+					'Group memories by any string. Leave empty for global scope.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
 						operation: ['delete'],
 					},
 				},
-			},
-			{
-				displayName: 'Additional Fields',
-				name: 'deleteAdditionalFields',
-				type: 'collection',
-				placeholder: 'Add Field',
-				default: {},
-				displayOptions: {
-					show: {
-						resource: ['memory'],
-						operation: ['delete'],
-					},
-				},
-				options: [
-					{
-						displayName: 'Agent ID',
-						name: 'agentId',
-						type: 'string',
-						default: '',
-						description: 'Filter by agent ID.',
-					},
-					{
-						displayName: 'Session ID',
-						name: 'sessionId',
-						type: 'string',
-						default: '',
-						description: 'Filter by session ID.',
-					},
-					{
-						displayName: 'User ID',
-						name: 'userId',
-						type: 'string',
-						default: '',
-						description: 'Filter by user ID.',
-					},
-				],
 			},
 		],
 	};
@@ -845,29 +610,16 @@ async function storeMemory(
 	baseUrl: string,
 ): Promise<IDataObject> {
 	const content = this.getNodeParameter('content', i) as string;
-	const scope = this.getNodeParameter('scope', i) as string;
 	const namespace = this.getNodeParameter('namespace', i, '') as string;
 	const additional = this.getNodeParameter(
 		'storeAdditionalFields',
 		i,
 	) as IDataObject;
 
-	const body: IDataObject = { content, scope };
+	const body: IDataObject = { content };
 
-	// Scope-specific IDs
-	if (scope === 'session') {
-		body.session_id = this.getNodeParameter('sessionId', i) as string;
-	} else if (scope === 'user') {
-		body.user_id = this.getNodeParameter('userId', i) as string;
-	} else if (scope === 'agent') {
-		body.agent_id = this.getNodeParameter('agentId', i) as string;
-	}
-
-	// Namespace — top-level parameter takes priority, fall back to additional fields
 	if (namespace) {
 		body.namespace = namespace;
-	} else if (additional.namespace) {
-		body.namespace = additional.namespace;
 	}
 	if (additional.tags) body.tags = parseTags(additional.tags as string);
 	if (additional.ttlSeconds) body.ttl_seconds = additional.ttlSeconds;
@@ -898,15 +650,8 @@ async function searchMemories(
 
 	const body: IDataObject = { query };
 
-	if (additional.scope) body.scope = additional.scope;
-	if (additional.sessionId) body.session_id = additional.sessionId;
-	if (additional.userId) body.user_id = additional.userId;
-	if (additional.agentId) body.agent_id = additional.agentId;
-	// Namespace — top-level parameter takes priority, fall back to additional fields
 	if (namespace) {
 		body.namespace = namespace;
-	} else if (additional.namespace) {
-		body.namespace = additional.namespace;
 	}
 	if (additional.tags) body.tags = parseTags(additional.tags as string);
 	if (additional.limit) body.limit = additional.limit;
@@ -930,15 +675,8 @@ async function getContext(
 
 	const body: IDataObject = { query, format };
 
-	if (additional.scope) body.scope = additional.scope;
-	if (additional.sessionId) body.session_id = additional.sessionId;
-	if (additional.userId) body.user_id = additional.userId;
-	if (additional.agentId) body.agent_id = additional.agentId;
-	// Namespace — top-level parameter takes priority, fall back to additional fields
 	if (namespace) {
 		body.namespace = namespace;
-	} else if (additional.namespace) {
-		body.namespace = additional.namespace;
 	}
 	if (additional.tags) body.tags = parseTags(additional.tags as string);
 	if (additional.maxMemories) body.limit = additional.maxMemories;
@@ -960,15 +698,8 @@ async function listMemories(
 
 	const qs: IDataObject = {};
 
-	if (additional.scope) qs.scope = additional.scope;
-	if (additional.sessionId) qs.session_id = additional.sessionId;
-	if (additional.userId) qs.user_id = additional.userId;
-	if (additional.agentId) qs.agent_id = additional.agentId;
-	// Namespace — top-level parameter takes priority, fall back to additional fields
 	if (namespace) {
 		qs.namespace = namespace;
-	} else if (additional.namespace) {
-		qs.namespace = additional.namespace;
 	}
 	if (additional.tags) qs.tags = (additional.tags as string);
 	if (additional.limit) qs.limit = additional.limit;
@@ -989,23 +720,12 @@ async function deleteMemories(
 	i: number,
 	baseUrl: string,
 ): Promise<IDataObject> {
-	const scope = this.getNodeParameter('deleteScope', i) as string;
 	const namespace = this.getNodeParameter('namespace', i, '') as string;
-	const additional = this.getNodeParameter(
-		'deleteAdditionalFields',
-		i,
-	) as IDataObject;
 
-	const body: IDataObject = { scope };
+	const body: IDataObject = {};
 
-	if (additional.sessionId) body.session_id = additional.sessionId;
-	if (additional.userId) body.user_id = additional.userId;
-	if (additional.agentId) body.agent_id = additional.agentId;
-	// Namespace — top-level parameter takes priority, fall back to additional fields
 	if (namespace) {
 		body.namespace = namespace;
-	} else if (additional.namespace) {
-		body.namespace = additional.namespace;
 	}
 
 	return apiRequest.call(this, 'DELETE', baseUrl, '/v1/memories', body);
