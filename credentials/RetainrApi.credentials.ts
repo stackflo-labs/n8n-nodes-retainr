@@ -19,7 +19,7 @@ export class RetainrApi implements ICredentialType {
 			default: '',
 			placeholder: 'rec_live_...',
 			description:
-				'Your retainr.dev API key. Create one at https://retainr.dev/dashboard.',
+				'Your retainr.dev API key. Each key is scoped to one workspace. Create keys at https://retainr.dev/dashboard.',
 		},
 		{
 			displayName: 'Base URL',

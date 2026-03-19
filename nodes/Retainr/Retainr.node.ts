@@ -233,9 +233,9 @@ export class Retainr implements INodeType {
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'acme-corp',
+				placeholder: 'sarah-chen-001',
 				description:
-					'Namespace for organizing memories by customer or tenant (e.g., "acme-corp").',
+					'Customer or tenant identifier within this workspace. Workspace is set by the API key; namespace groups memories per customer.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
@@ -324,8 +324,8 @@ export class Retainr implements INodeType {
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'acme-corp',
-				description: 'Filter memories by namespace.',
+				placeholder: 'sarah-chen-001',
+				description: 'Filter by customer/tenant namespace within this workspace.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
@@ -468,8 +468,8 @@ export class Retainr implements INodeType {
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'acme-corp',
-				description: 'Filter memories by namespace.',
+				placeholder: 'sarah-chen-001',
+				description: 'Filter by customer/tenant namespace within this workspace.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
@@ -564,8 +564,8 @@ export class Retainr implements INodeType {
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'acme-corp',
-				description: 'Filter memories by namespace.',
+				placeholder: 'sarah-chen-001',
+				description: 'Filter by customer/tenant namespace within this workspace.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
@@ -678,8 +678,8 @@ export class Retainr implements INodeType {
 				type: 'string',
 				required: false,
 				default: '',
-				placeholder: 'acme-corp',
-				description: 'Filter memories by namespace.',
+				placeholder: 'sarah-chen-001',
+				description: 'Filter by customer/tenant namespace within this workspace.',
 				displayOptions: {
 					show: {
 						resource: ['memory'],
