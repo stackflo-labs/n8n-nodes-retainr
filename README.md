@@ -20,13 +20,23 @@ Give your n8n AI agents **long-term memory** that persists across workflow runs.
 ### n8n Cloud & Desktop
 
 1. Go to **Settings > Community Nodes**
-2. Search for `@stackflo-labs/n8n-nodes-retainr`
+2. Click **Install**
+3. Enter the exact package name: `@stackflo-labs/n8n-nodes-retainr`
+4. Click **Install** and restart if prompted
+
+### Self-hosted n8n (UI)
+
+1. Go to **Settings > Community Nodes > Install**
+2. Enter `@stackflo-labs/n8n-nodes-retainr`
 3. Click **Install**
 
-### Self-hosted n8n
+Requires `N8N_COMMUNITY_PACKAGES_ENABLED=true` in your environment (set by default in Docker).
+
+### Self-hosted n8n (manual / Docker volume)
 
 ```bash
-cd ~/.n8n
+# If you mount a custom node directory or manage packages directly:
+cd /home/node/.n8n
 npm install @stackflo-labs/n8n-nodes-retainr
 ```
 
@@ -72,34 +82,6 @@ Use the **Dedup Threshold** field (e.g., `0.95`) when storing. If a sufficiently
 ## AI Agent Tool
 
 This node has `usableAsTool` enabled — you can use it directly as a tool inside n8n's **AI Agent** node, letting the agent decide when to store or recall memories autonomously.
-
-## Demo Video
-
-A recorded demo covering all n8n Creator Portal requirements is at:
-
-```
-products/retainr/web/public/demo/n8n-demo.mp4
-```
-
-**To re-record** (e.g. after a node update):
-
-```bash
-# 1. Start n8n with the node pre-installed
-cd packages/n8n-node
-docker compose -f demo/docker-compose.demo.yml up --build -d
-
-# 2. Record
-cd ../../products/retainr/web
-OPENROUTER_API_KEY=sk-or-... N8N_BASE_URL=http://127.0.0.1:5679 \
-node scripts/record-n8n-demo.mjs
-
-# 3. Post-process to MP4
-bash ../../packages/n8n-node/demo/post-process.sh public/demo/n8n-demo-raw.webm
-
-# 4. Tear down
-cd ../../packages/n8n-node
-docker compose -f demo/docker-compose.demo.yml down
-```
 
 ## API Documentation
 
