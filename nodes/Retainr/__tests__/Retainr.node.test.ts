@@ -19,7 +19,10 @@ function createMock(
 
 	return {
 		getInputData: () => [{ json: {}, pairedItem: 0 }],
-		getNodeParameter: (name: string, _index?: number) => parameters[name],
+		getNodeParameter: (name: string, _index?: number, defaultValue?: unknown) => {
+			const val = parameters[name];
+			return val !== undefined ? val : defaultValue;
+		},
 		getCredentials: jest.fn().mockResolvedValue({
 			apiKey: API_KEY,
 			baseUrl: BASE_URL,
@@ -47,13 +50,12 @@ describe('Retainr node', () => {
 	// ── Memory > Store ──────────────────────────────────────────────────────
 
 	describe('Memory > Store', () => {
-		it('POSTs to /v1/memories with user scope', async () => {
+		it('POSTs to /v1/memories with content only (no namespace)', async () => {
 			const mock = createMock({
 				resource: 'memory',
 				operation: 'store',
 				content: 'User prefers dark mode',
-				scope: 'user',
-				userId: 'user-abc-123',
+				namespace: '',
 				storeAdditionalFields: {},
 			});
 
@@ -64,21 +66,16 @@ describe('Retainr node', () => {
 			const opts = getRequestOptions(mock);
 			expect(opts.method).toBe('POST');
 			expect(opts.url).toBe(`${BASE_URL}/v1/memories`);
-			expect(opts.body).toEqual({
-				content: 'User prefers dark mode',
-				scope: 'user',
-				user_id: 'user-abc-123',
-			});
+			expect(opts.body).toEqual({ content: 'User prefers dark mode' });
 			expect(result[0][0].json).toEqual({ id: 'mem_test123' });
 		});
 
-		it('POSTs with session scope and session_id', async () => {
+		it('POSTs with namespace set', async () => {
 			const mock = createMock({
 				resource: 'memory',
 				operation: 'store',
 				content: 'Workflow context',
-				scope: 'session',
-				sessionId: 'run-xyz-789',
+				namespace: 'customer:alice',
 				storeAdditionalFields: {},
 			});
 
@@ -87,49 +84,26 @@ describe('Retainr node', () => {
 			const opts = getRequestOptions(mock);
 			expect(opts.body).toEqual(
 				expect.objectContaining({
-					scope: 'session',
-					session_id: 'run-xyz-789',
+					content: 'Workflow context',
+					namespace: 'customer:alice',
 				}),
 			);
 		});
 
-		it('POSTs with agent scope and agent_id', async () => {
-			const mock = createMock({
-				resource: 'memory',
-				operation: 'store',
-				content: 'Agent instruction',
-				scope: 'agent',
-				agentId: 'crm-bot',
-				storeAdditionalFields: {},
-			});
-
-			await node.execute.call(mock as unknown as IExecuteFunctions);
-
-			const opts = getRequestOptions(mock);
-			expect(opts.body).toEqual(
-				expect.objectContaining({
-					scope: 'agent',
-					agent_id: 'crm-bot',
-				}),
-			);
-		});
-
-		it('POSTs with global scope (no scope-specific ID)', async () => {
+		it('omits namespace when empty string', async () => {
 			const mock = createMock({
 				resource: 'memory',
 				operation: 'store',
 				content: 'Global note',
-				scope: 'global',
+				namespace: '',
 				storeAdditionalFields: {},
 			});
 
 			await node.execute.call(mock as unknown as IExecuteFunctions);
 
 			const body = getRequestOptions(mock).body as Record<string, unknown>;
-			expect(body.scope).toBe('global');
-			expect(body).not.toHaveProperty('user_id');
-			expect(body).not.toHaveProperty('session_id');
-			expect(body).not.toHaveProperty('agent_id');
+			expect(body.content).toBe('Global note');
+			expect(body).not.toHaveProperty('namespace');
 		});
 
 		it('includes ttl_seconds from additional fields', async () => {
@@ -137,7 +111,7 @@ describe('Retainr node', () => {
 				resource: 'memory',
 				operation: 'store',
 				content: 'Ephemeral',
-				scope: 'global',
+				namespace: '',
 				storeAdditionalFields: { ttlSeconds: 3600 },
 			});
 
@@ -152,7 +126,7 @@ describe('Retainr node', () => {
 				resource: 'memory',
 				operation: 'store',
 				content: 'Permanent',
-				scope: 'global',
+				namespace: '',
 				storeAdditionalFields: { ttlSeconds: 0 },
 			});
 
@@ -167,7 +141,7 @@ describe('Retainr node', () => {
 				resource: 'memory',
 				operation: 'store',
 				content: 'Tagged memory',
-				scope: 'global',
+				namespace: '',
 				storeAdditionalFields: {
 					tags: 'preference, communication, important',
 				},
@@ -188,7 +162,7 @@ describe('Retainr node', () => {
 				resource: 'memory',
 				operation: 'store',
 				content: 'No tags',
-				scope: 'global',
+				namespace: '',
 				storeAdditionalFields: { tags: '' },
 			});
 
@@ -203,7 +177,7 @@ describe('Retainr node', () => {
 				resource: 'memory',
 				operation: 'store',
 				content: 'Dedup test',
-				scope: 'global',
+				namespace: '',
 				storeAdditionalFields: { dedupThreshold: 0.95 },
 			});
 
@@ -213,27 +187,12 @@ describe('Retainr node', () => {
 			expect(body.dedup_threshold).toBe(0.95);
 		});
 
-		it('includes namespace when set', async () => {
-			const mock = createMock({
-				resource: 'memory',
-				operation: 'store',
-				content: 'Namespaced',
-				scope: 'global',
-				storeAdditionalFields: { namespace: 'onboarding' },
-			});
-
-			await node.execute.call(mock as unknown as IExecuteFunctions);
-
-			const body = getRequestOptions(mock).body as Record<string, unknown>;
-			expect(body.namespace).toBe('onboarding');
-		});
-
 		it('parses metadata JSON string', async () => {
 			const mock = createMock({
 				resource: 'memory',
 				operation: 'store',
 				content: 'With metadata',
-				scope: 'global',
+				namespace: '',
 				storeAdditionalFields: {
 					metadata: '{"source":"n8n","version":2}',
 				},
@@ -249,15 +208,14 @@ describe('Retainr node', () => {
 	// ── Memory > Search ─────────────────────────────────────────────────────
 
 	describe('Memory > Search', () => {
-		it('POSTs to /v1/memories/search with query', async () => {
+		it('POSTs to /v1/memories/search with query and namespace', async () => {
 			const mock = createMock(
 				{
 					resource: 'memory',
 					operation: 'search',
 					query: 'user preferences',
+					namespace: 'customer:alice',
 					searchAdditionalFields: {
-						scope: 'user',
-						userId: 'user-abc-123',
 						limit: 3,
 						threshold: 0.8,
 					},
@@ -278,8 +236,7 @@ describe('Retainr node', () => {
 			expect(opts.url).toBe(`${BASE_URL}/v1/memories/search`);
 			expect(opts.body).toEqual({
 				query: 'user preferences',
-				scope: 'user',
-				user_id: 'user-abc-123',
+				namespace: 'customer:alice',
 				limit: 3,
 				threshold: 0.8,
 			});
@@ -295,6 +252,7 @@ describe('Retainr node', () => {
 				resource: 'memory',
 				operation: 'search',
 				query: 'anything',
+				namespace: '',
 				searchAdditionalFields: {},
 			});
 
@@ -309,6 +267,7 @@ describe('Retainr node', () => {
 				resource: 'memory',
 				operation: 'search',
 				query: 'tagged search',
+				namespace: '',
 				searchAdditionalFields: { tags: 'preference, urgent' },
 			});
 
@@ -322,16 +281,15 @@ describe('Retainr node', () => {
 	// ── Memory > Get Context ────────────────────────────────────────────────
 
 	describe('Memory > Get Context', () => {
-		it('POSTs to /v1/memories/context with query and format', async () => {
+		it('POSTs to /v1/memories/context with query, format, and namespace', async () => {
 			const mock = createMock(
 				{
 					resource: 'memory',
 					operation: 'getContext',
 					query: 'customer summary',
 					format: 'system_prompt',
+					namespace: 'customer:alice',
 					contextAdditionalFields: {
-						scope: 'user',
-						userId: 'u-42',
 						maxMemories: 10,
 						threshold: 0.35,
 					},
@@ -349,8 +307,7 @@ describe('Retainr node', () => {
 			expect(opts.body).toEqual({
 				query: 'customer summary',
 				format: 'system_prompt',
-				scope: 'user',
-				user_id: 'u-42',
+				namespace: 'customer:alice',
 				limit: 10,
 				threshold: 0.35,
 			});
@@ -365,6 +322,7 @@ describe('Retainr node', () => {
 				operation: 'getContext',
 				query: 'basics',
 				format: 'bullet_list',
+				namespace: '',
 				contextAdditionalFields: {},
 			});
 
@@ -378,16 +336,13 @@ describe('Retainr node', () => {
 	// ── Memory > List ───────────────────────────────────────────────────────
 
 	describe('Memory > List', () => {
-		it('GETs /v1/memories with query params', async () => {
+		it('GETs /v1/memories with namespace and limit', async () => {
 			const mock = createMock(
 				{
 					resource: 'memory',
 					operation: 'list',
-					listAdditionalFields: {
-						scope: 'session',
-						sessionId: 'sess-xyz',
-						limit: 10,
-					},
+					namespace: 'customer:alice',
+					listAdditionalFields: { limit: 10 },
 				},
 				{ memories: [] },
 			);
@@ -398,22 +353,19 @@ describe('Retainr node', () => {
 			expect(opts.method).toBe('GET');
 			expect(opts.url).toBe(`${BASE_URL}/v1/memories`);
 			expect(opts.qs).toEqual({
-				scope: 'session',
-				session_id: 'sess-xyz',
+				namespace: 'customer:alice',
 				limit: 10,
 			});
 		});
 
-		it('includes offset and namespace', async () => {
+		it('includes offset', async () => {
 			const mock = createMock({
 				resource: 'memory',
 				operation: 'list',
+				namespace: 'project:onboarding',
 				listAdditionalFields: {
-					scope: 'agent',
-					agentId: 'support-bot',
 					limit: 20,
 					offset: 50,
-					namespace: 'tickets',
 				},
 			});
 
@@ -422,26 +374,24 @@ describe('Retainr node', () => {
 			const opts = getRequestOptions(mock);
 			expect(opts.qs).toEqual(
 				expect.objectContaining({
-					scope: 'agent',
-					agent_id: 'support-bot',
+					namespace: 'project:onboarding',
 					limit: 20,
 					offset: 50,
-					namespace: 'tickets',
 				}),
 			);
 		});
 
-		it('sends no qs when no additional fields', async () => {
+		it('sends no qs when no additional fields and no namespace', async () => {
 			const mock = createMock({
 				resource: 'memory',
 				operation: 'list',
+				namespace: '',
 				listAdditionalFields: {},
 			});
 
 			await node.execute.call(mock as unknown as IExecuteFunctions);
 
 			const opts = getRequestOptions(mock);
-			// No qs should be set (or empty)
 			expect(opts.qs).toBeUndefined();
 		});
 	});
@@ -449,13 +399,12 @@ describe('Retainr node', () => {
 	// ── Memory > Delete ─────────────────────────────────────────────────────
 
 	describe('Memory > Delete', () => {
-		it('DELETEs /v1/memories with scope and filter', async () => {
+		it('DELETEs /v1/memories with namespace', async () => {
 			const mock = createMock(
 				{
 					resource: 'memory',
 					operation: 'delete',
-					deleteScope: 'agent',
-					deleteAdditionalFields: { agentId: 'crm-bot' },
+					namespace: 'customer:alice',
 				},
 				{ deleted: 5 },
 			);
@@ -465,47 +414,24 @@ describe('Retainr node', () => {
 			const opts = getRequestOptions(mock);
 			expect(opts.method).toBe('DELETE');
 			expect(opts.url).toBe(`${BASE_URL}/v1/memories`);
-			expect(opts.body).toEqual({
-				scope: 'agent',
-				agent_id: 'crm-bot',
-			});
+			expect(opts.body).toEqual({ namespace: 'customer:alice' });
 		});
 
-		it('DELETEs with user scope', async () => {
+		it('DELETEs with empty body when no namespace', async () => {
 			const mock = createMock(
 				{
 					resource: 'memory',
 					operation: 'delete',
-					deleteScope: 'user',
-					deleteAdditionalFields: { userId: 'churned-user-99' },
+					namespace: '',
 				},
 				{ deleted: 12 },
 			);
 
 			await node.execute.call(mock as unknown as IExecuteFunctions);
 
-			const body = getRequestOptions(mock).body as Record<string, unknown>;
-			expect(body).toEqual({
-				scope: 'user',
-				user_id: 'churned-user-99',
-			});
-		});
-
-		it('DELETEs with global scope and namespace', async () => {
-			const mock = createMock(
-				{
-					resource: 'memory',
-					operation: 'delete',
-					deleteScope: 'global',
-					deleteAdditionalFields: { namespace: 'temp' },
-				},
-				{ deleted: 3 },
-			);
-
-			await node.execute.call(mock as unknown as IExecuteFunctions);
-
-			const body = getRequestOptions(mock).body as Record<string, unknown>;
-			expect(body).toEqual({ scope: 'global', namespace: 'temp' });
+			const opts = getRequestOptions(mock);
+			// body is empty object — apiRequest omits body when empty
+			expect(opts.body).toBeUndefined();
 		});
 	});
 
@@ -549,7 +475,7 @@ describe('Retainr node', () => {
 					resource: 'memory',
 					operation: 'store',
 					content: 'test',
-					scope: 'global',
+					namespace: '',
 					storeAdditionalFields: {},
 				},
 				undefined,
@@ -574,7 +500,7 @@ describe('Retainr node', () => {
 					resource: 'memory',
 					operation: 'store',
 					content: 'test',
-					scope: 'global',
+					namespace: '',
 					storeAdditionalFields: {},
 				},
 				undefined,
@@ -595,22 +521,21 @@ describe('Retainr node', () => {
 	describe('multiple input items', () => {
 		it('processes each item independently', async () => {
 			const items = [
-				{ content: 'first memory', userId: 'u1' },
-				{ content: 'second memory', userId: 'u2' },
+				{ content: 'first memory', namespace: 'customer:u1' },
+				{ content: 'second memory', namespace: 'customer:u2' },
 			];
 
 			const httpMock = jest.fn().mockResolvedValue({ id: 'ok' });
 			const mock = {
 				getInputData: () =>
 					items.map((item) => ({ json: item, pairedItem: 0 })),
-				getNodeParameter: (name: string, i: number) => {
+				getNodeParameter: (name: string, i: number, defaultValue?: unknown) => {
 					if (name === 'resource') return 'memory';
 					if (name === 'operation') return 'store';
 					if (name === 'content') return items[i].content;
-					if (name === 'scope') return 'user';
-					if (name === 'userId') return items[i].userId;
+					if (name === 'namespace') return items[i].namespace;
 					if (name === 'storeAdditionalFields') return {};
-					return undefined;
+					return defaultValue;
 				},
 				getCredentials: jest.fn().mockResolvedValue({
 					apiKey: API_KEY,
