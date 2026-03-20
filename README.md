@@ -8,11 +8,11 @@ Give your n8n AI agents **long-term memory** that persists across workflow runs.
 
 | Operation | Description |
 |-----------|-------------|
-| **Store** | Save a memory with scope, tags, metadata, TTL, and deduplication |
+| **Store** | Save a memory with namespace, tags, metadata, TTL, and deduplication |
 | **Search** | Semantic similarity search across stored memories |
 | **Get Context** | Retrieve pre-formatted memory context ready for LLM system prompts |
-| **List** | Browse memories with filters (scope, user, session, tags) |
-| **Delete** | Remove memories by filter criteria |
+| **List** | Browse memories with filters (namespace, tags) |
+| **Delete** | Remove memories by namespace |
 | **Get Workspace Info** | View plan usage, API keys, and workspace details |
 
 ## Installation
@@ -36,8 +36,17 @@ Then restart n8n.
 
 1. Sign up at [retainr.dev](https://retainr.dev) and get your API key
 2. In n8n, go to **Credentials > New > Retainr API**
-3. Paste your API key (`rec_live_...`)
+3. Paste your API key (`rec_live_...`) — each key is scoped to one workspace
 4. The default Base URL (`https://api.retainr.dev`) works out of the box
+
+## How it works
+
+**Workspace → Namespace** hierarchy:
+
+- **Workspace**: Your organization, determined by the API key
+- **Namespace**: Groups memories by customer, tenant, or any identifier (e.g., `customer:alice`, `project:onboarding`)
+
+Every memory operation accepts a **Namespace** field. Use it to keep each customer's memories separate within your workspace.
 
 ## Usage Examples
 
@@ -46,27 +55,19 @@ Then restart n8n.
 1. Add the **Retainr** node after your AI Agent
 2. Set **Resource** to `Memory`, **Operation** to `Store`
 3. Map the conversation summary to the **Content** field
-4. Set **Scope** to `User` and provide the **User ID**
+4. Set **Namespace** to the customer identifier (e.g., `customer:alice`)
 
 ### Inject memory context into an LLM prompt
 
 1. Add a **Retainr** node before your AI Agent
 2. Set **Operation** to `Get Context`
 3. Use the incoming message as the **Query**
-4. Pass the `context` output into your LLM's system prompt
+4. Set the same **Namespace** to retrieve that customer's memories
+5. Pass the `context` output into your LLM's system prompt
 
 ### Deduplicate similar memories
 
 Use the **Dedup Threshold** field (e.g., `0.95`) when storing. If a sufficiently similar memory already exists, it will be updated instead of duplicated.
-
-## Memory Scopes
-
-| Scope | Use case |
-|-------|----------|
-| `session` | Single workflow run — requires `session_id` |
-| `user` | Persists across runs for one user — requires `user_id` |
-| `agent` | Shared across users for one agent — requires `agent_id` |
-| `global` | Shared across the entire workspace |
 
 ## AI Agent Tool
 
@@ -80,35 +81,29 @@ A recorded demo covering all n8n Creator Portal requirements is at:
 products/retainr/web/public/demo/n8n-demo.mp4
 ```
 
-Full disk path (Windows): `D:\dev\datadir\stackflo\products\retainr\web\public\demo\n8n-demo.mp4`
-
 **To re-record** (e.g. after a node update):
 
 ```bash
 # 1. Start n8n with the node pre-installed
 cd packages/n8n-node
-docker compose -f e2e/docker-compose.yml up --build -d
+docker compose -f demo/docker-compose.demo.yml up --build -d
 
-# 2. Record — no API keys needed, the script handles everything
+# 2. Record
 cd ../../products/retainr/web
-N8N_BASE_URL=http://127.0.0.1:5678 \
+OPENROUTER_API_KEY=sk-or-... N8N_BASE_URL=http://127.0.0.1:5679 \
 node scripts/record-n8n-demo.mjs
-# → public/demo/n8n-demo-raw.webm
 
 # 3. Post-process to MP4
 bash ../../packages/n8n-node/demo/post-process.sh public/demo/n8n-demo-raw.webm
-# → public/demo/n8n-demo.mp4
 
 # 4. Tear down
 cd ../../packages/n8n-node
-docker compose -f e2e/docker-compose.yml down
+docker compose -f demo/docker-compose.demo.yml down
 ```
-
-See `demo/README.md` for full details.
 
 ## API Documentation
 
-Full API reference: [retainr.dev/docs/api](https://retainr.dev/docs/api)
+Full API reference: [retainr.dev/docs](https://retainr.dev/docs)
 
 ## License
 
