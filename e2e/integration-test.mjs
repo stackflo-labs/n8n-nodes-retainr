@@ -398,7 +398,7 @@ async function phase2WorkflowExecution(auth, nodeType) {
   assert(credential != null, 'n8n credential created for retainrApi')
 
   const ts = Date.now()
-  const testUserId = `e2e-user-${ts}`
+  const testNamespace = `e2e-ci-${ts}`
 
   // ── 2a: Store Memory ────────────────────────────────────────────────────
   console.log('\n--- 2a: Store Memory ---\n')
@@ -406,8 +406,7 @@ async function phase2WorkflowExecution(auth, nodeType) {
     resource: 'memory',
     operation: 'store',
     content: `E2E test memory at ${ts}`,
-    scope: 'user',
-    userId: testUserId,
+    namespace: testNamespace,
     storeAdditionalFields: { ttlSeconds: TEST_TTL, tags: 'e2e-test' },
   }, credential, nodeType)
   if (storeOutput) {
@@ -423,9 +422,8 @@ async function phase2WorkflowExecution(auth, nodeType) {
     resource: 'memory',
     operation: 'search',
     query: `E2E test memory at ${ts}`,
+    namespace: testNamespace,
     searchAdditionalFields: {
-      scope: 'user',
-      userId: testUserId,
       limit: 5,
       threshold: 0.3,
     },
@@ -442,9 +440,8 @@ async function phase2WorkflowExecution(auth, nodeType) {
     operation: 'getContext',
     query: `E2E test memory`,
     format: 'bullet_list',
+    namespace: testNamespace,
     contextAdditionalFields: {
-      scope: 'user',
-      userId: testUserId,
       maxMemories: 5,
     },
   }, credential, nodeType)
@@ -458,9 +455,8 @@ async function phase2WorkflowExecution(auth, nodeType) {
   const listOutput = await runWorkflowTest(auth, 'CI: List Memories', {
     resource: 'memory',
     operation: 'list',
+    namespace: testNamespace,
     listAdditionalFields: {
-      scope: 'user',
-      userId: testUserId,
       limit: 10,
     },
   }, credential, nodeType)
@@ -486,8 +482,7 @@ async function phase2WorkflowExecution(auth, nodeType) {
   const deleteOutput = await runWorkflowTest(auth, 'CI: Delete Memories', {
     resource: 'memory',
     operation: 'delete',
-    deleteScope: 'user',
-    deleteAdditionalFields: { userId: testUserId },
+    namespace: testNamespace,
   }, credential, nodeType)
   if (deleteOutput) {
     pass(`Delete returned: ${JSON.stringify(deleteOutput).slice(0, 100)}`)
@@ -502,7 +497,7 @@ async function phase3DirectApi() {
   console.log('=== Phase 3: Direct Retainr API validation ===\n')
 
   const ts = Date.now()
-  const userId = `e2e-direct-${ts}`
+  const namespace = `e2e-direct-${ts}`
 
   // ── 3a: Store ─────────────────────────────────────────────────────────
   console.log('--- 3a: Store ---\n')
@@ -510,8 +505,7 @@ async function phase3DirectApi() {
     method: 'POST',
     body: JSON.stringify({
       content: `Direct API test memory ${ts}`,
-      scope: 'user',
-      user_id: userId,
+      namespace,
       ttl_seconds: TEST_TTL,
       tags: ['e2e-direct'],
     }),
@@ -529,8 +523,7 @@ async function phase3DirectApi() {
     method: 'POST',
     body: JSON.stringify({
       query: `Direct API test memory ${ts}`,
-      scope: 'user',
-      user_id: userId,
+      namespace,
       limit: 5,
       threshold: 0.3,
     }),
@@ -547,8 +540,7 @@ async function phase3DirectApi() {
     body: JSON.stringify({
       query: 'Direct API test',
       format: 'system_prompt',
-      scope: 'user',
-      user_id: userId,
+      namespace,
       limit: 5,
     }),
   })
@@ -559,7 +551,7 @@ async function phase3DirectApi() {
 
   // ── 3d: List ──────────────────────────────────────────────────────────
   console.log('\n--- 3d: List ---\n')
-  const listRes = await retainrFetch(`/v1/memories?scope=user&user_id=${userId}&limit=10`)
+  const listRes = await retainrFetch(`/v1/memories?namespace=${encodeURIComponent(namespace)}&limit=10`)
   assert(listRes.ok, 'List API returns 2xx', `got ${listRes.status}`)
   const listData = await listRes.json()
   const memories = listData.memories ?? []
@@ -576,14 +568,14 @@ async function phase3DirectApi() {
   console.log('\n--- 3f: Delete ---\n')
   const deleteRes = await retainrFetch('/v1/memories', {
     method: 'DELETE',
-    body: JSON.stringify({ scope: 'user', user_id: userId }),
+    body: JSON.stringify({ namespace }),
   })
   assert(deleteRes.ok, 'Delete API returns 2xx', `got ${deleteRes.status}`)
   const deleteData = await deleteRes.json()
   pass(`Deleted ${deleteData.deleted ?? '?'} memories`)
 
   // Verify deletion
-  const verifyRes = await retainrFetch(`/v1/memories?scope=user&user_id=${userId}&limit=10`)
+  const verifyRes = await retainrFetch(`/v1/memories?namespace=${encodeURIComponent(namespace)}&limit=10`)
   if (verifyRes.ok) {
     const verifyData = await verifyRes.json()
     const remaining = verifyData.memories ?? []
@@ -609,15 +601,14 @@ async function phase4Analytics() {
   // ── 4a: Store 3 memories + search to generate retrieval data ──────────
   console.log('--- 4a: Generate retrieval data ---\n')
   const ts = Date.now()
-  const analyticsUserId = `e2e-analytics-${ts}`
+  const analyticsNamespace = `e2e-analytics-${ts}`
 
   for (let i = 1; i <= 3; i++) {
     const r = await retainrFetch('/v1/memories', {
       method: 'POST',
       body: JSON.stringify({
         content: `Analytics e2e memory ${i} at ${ts}`,
-        scope: 'user',
-        user_id: analyticsUserId,
+        namespace: analyticsNamespace,
         ttl_seconds: TEST_TTL,
       }),
     })
@@ -632,8 +623,7 @@ async function phase4Analytics() {
     method: 'POST',
     body: JSON.stringify({
       query: `Analytics e2e memory at ${ts}`,
-      scope: 'user',
-      user_id: analyticsUserId,
+      namespace: analyticsNamespace,
       limit: 5,
       threshold: 0.3,
     }),
@@ -648,8 +638,7 @@ async function phase4Analytics() {
     method: 'POST',
     body: JSON.stringify({
       query: `Analytics e2e memory at ${ts}`,
-      scope: 'user',
-      user_id: analyticsUserId,
+      namespace: analyticsNamespace,
       limit: 5,
     }),
   })
@@ -729,7 +718,7 @@ async function phase4Analytics() {
 
   // Verify memories are gone
   await sleep(300)
-  const verifyRes = await retainrFetch(`/v1/memories?scope=user&user_id=${analyticsUserId}&limit=10`)
+  const verifyRes = await retainrFetch(`/v1/memories?namespace=${encodeURIComponent(analyticsNamespace)}&limit=10`)
   if (verifyRes.ok) {
     const verifyData = await verifyRes.json()
     const remaining = verifyData.memories ?? []
