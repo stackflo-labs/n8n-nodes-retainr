@@ -29,9 +29,14 @@ services:
       - EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=true
       - N8N_LOG_LEVEL=warn
       - N8N_DEFAULT_LOCALE=en
+    volumes:
+      - n8n_creator_data:/home/node/.n8n
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:5678/rest/settings || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 30
       start_period: 15s
+
+volumes:
+  n8n_creator_data:

@@ -42,7 +42,10 @@
     "e2e:run": "npm run e2e:up && npm run e2e -- && npm run e2e:down",
     "demo:up": "docker compose -f demo/docker-compose.demo.yml up --build -d",
     "demo:down": "docker compose -f demo/docker-compose.demo.yml down",
-    "demo:record": "npm run demo:up && cd ../../products/retainr/web && node scripts/record-n8n-demo.mjs"
+    "demo:record": "npm run demo:up && cd ../../products/retainr/web && node scripts/record-n8n-demo.mjs",
+    "creator-portal:up": "docker compose -f demo/docker-compose.creator-portal.yml up -d",
+    "creator-portal:down": "docker compose -f demo/docker-compose.creator-portal.yml down -v",
+    "creator-portal:record": "npm run creator-portal:up && cd ../../products/retainr/web && N8N_BASE_URL=http://127.0.0.1:5679 node scripts/record-n8n-demo.mjs"
   },
   "publishConfig": {
     "access": "public"
