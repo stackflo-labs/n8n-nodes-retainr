@@ -466,6 +466,17 @@ export class Retainr implements INodeType {
 						default: '',
 						description: 'Comma-separated list of tags to filter by.',
 					},
+					{
+						displayName: 'Sort',
+						name: 'sort',
+						type: 'options',
+						default: 'desc',
+						description: 'Sort order by creation time.',
+						options: [
+							{ name: 'Newest First', value: 'desc' },
+							{ name: 'Oldest First', value: 'asc' },
+						],
+					},
 				],
 			},
 
@@ -704,6 +715,7 @@ async function listMemories(
 	if (additional.tags) qs.tags = (additional.tags as string);
 	if (additional.limit) qs.limit = additional.limit;
 	if (additional.offset) qs.offset = additional.offset;
+	if (additional.sort) qs.sort = additional.sort;
 
 	return apiRequest.call(
 		this,
