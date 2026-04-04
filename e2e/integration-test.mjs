@@ -8,6 +8,9 @@
  *   proving: n8n engine → credential decryption → node code → Retainr API.
  * Phase 3 (requires RETAINR_API_KEY): Direct Retainr API validation.
  *   Calls the same HTTP endpoints our node calls, proving the API contract.
+ * Phase 5 (requires RETAINR_API_KEY): Template validation.
+ *   Imports each n8n template, verifies schema, extracts retainr nodes and
+ *   executes each operation with static test data to confirm correct params.
  *
  * Usage:
  *   N8N_BASE_URL=http://localhost:5678 \
@@ -15,6 +18,12 @@
  *   RETAINR_API_URL=https://api-staging.retainr.dev \
  *   node e2e/integration-test.mjs
  */
+
+import { readFileSync, readdirSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const N8N_BASE_URL = process.env.N8N_BASE_URL ?? 'http://localhost:5678'
 const RETAINR_API_KEY = process.env.RETAINR_API_KEY ?? ''
@@ -737,6 +746,140 @@ async function phase4Analytics() {
   console.log()
 }
 
+// ── Phase 5: Template validation ────────────────────────────────────────────
+
+/**
+ * Strip n8n expressions from a value and replace with a static test string.
+ * Expressions look like ={{ ... }} — they won't work in isolated tests.
+ */
+function stripExpressions(value, staticReplacement = 'e2e-template-test') {
+  if (typeof value === 'string' && value.startsWith('={{')) return staticReplacement
+  return value
+}
+
+/**
+ * Recursively strip all expression strings from an object so we can run
+ * retainr nodes in isolation without depending on upstream node output.
+ */
+function flattenParams(params, ns = 'e2e-template-test') {
+  const out = {}
+  for (const [k, v] of Object.entries(params)) {
+    if (typeof v === 'string') {
+      out[k] = stripExpressions(v, ns)
+    } else if (v && typeof v === 'object' && !Array.isArray(v)) {
+      out[k] = flattenParams(v, ns)
+    } else {
+      out[k] = v
+    }
+  }
+  return out
+}
+
+async function phase5TemplateValidation(auth, credential, nodeType) {
+  console.log('=== Phase 5: Template validation ===\n')
+
+  // Templates live at ../../products/retainr/web/public/templates/ relative to e2e/
+  // __dirname = packages/n8n-node/e2e — go up 3 levels to repo root
+  const templatesDir = join(__dirname, '..', '..', '..', 'products', 'retainr', 'web', 'public', 'templates')
+  let templateFiles
+  try {
+    templateFiles = readdirSync(templatesDir).filter(f => f.startsWith('n8n-') && f.endsWith('.json'))
+  } catch (e) {
+    fail('Templates directory accessible', e.message)
+    return
+  }
+  assert(templateFiles.length > 0, `Found n8n templates (got ${templateFiles.length})`)
+  console.log(`   Found ${templateFiles.length} templates: ${templateFiles.join(', ')}\n`)
+
+  const importedWorkflowIds = []
+
+  for (const filename of templateFiles) {
+    const label = filename.replace('.json', '')
+    console.log(`--- Template: ${label} ---\n`)
+
+    // 5a: Load and parse JSON
+    let templateJson
+    try {
+      templateJson = JSON.parse(readFileSync(join(templatesDir, filename), 'utf8'))
+    } catch (e) {
+      fail(`${label}: JSON is valid`, e.message)
+      continue
+    }
+    pass(`${label}: JSON parses without errors`)
+
+    // 5b: Import into n8n (validates n8n schema)
+    const importRes = await n8nFetch(auth, '/rest/workflows', {
+      method: 'POST',
+      body: JSON.stringify(templateJson),
+    })
+    if (!importRes.ok) {
+      const errBody = await importRes.text()
+      fail(`${label}: imports into n8n`, `${importRes.status}: ${errBody.slice(0, 200)}`)
+      continue
+    }
+    const importBody = await importRes.json()
+    const imported = importBody.data ?? importBody
+    pass(`${label}: imports into n8n (id=${imported.id})`)
+    importedWorkflowIds.push(imported.id)
+
+    // 5c: For each retainr node, run the operation in isolation with static test data
+    const retainrNodes = templateJson.nodes.filter(n => n.type === nodeType || n.type === 'n8n-nodes-retainr.retainr')
+    if (retainrNodes.length === 0) {
+      fail(`${label}: has retainr nodes`, 'none found')
+      continue
+    }
+    pass(`${label}: has ${retainrNodes.length} retainr node(s)`)
+
+    const ts = Date.now()
+    const testNs = `e2e-tmpl-${ts}`
+
+    for (const node of retainrNodes) {
+      const nodeName = node.name
+      const rawParams = node.parameters ?? {}
+      const params = flattenParams(rawParams, testNs)
+
+      // Ensure required fields are present (fix any remaining gaps)
+      params.resource = params.resource ?? 'memory'
+
+      // For store: ensure content is a non-empty string
+      if (params.operation === 'store' && (!params.content || params.content.startsWith('=') )) {
+        params.content = `Template e2e test from ${label} at ${ts}`
+      }
+
+      // For search/getContext: ensure query is a non-empty string
+      if ((params.operation === 'search' || params.operation === 'getContext') && (!params.query || params.query.startsWith('='))) {
+        params.query = 'template e2e test query'
+      }
+
+      try {
+        const output = await runWorkflowTest(auth, `Template: ${label} — ${nodeName}`, params, credential, nodeType)
+        pass(`${label} / ${nodeName} (${params.operation}): executed successfully`)
+        if (params.operation === 'store' && output?.id) {
+          pass(`${label} / ${nodeName}: returned memory id=${output.id}`)
+        }
+        if (params.operation === 'search' && output?.results !== undefined) {
+          pass(`${label} / ${nodeName}: returned ${output.results?.length ?? 0} results`)
+        }
+      } catch (e) {
+        fail(`${label} / ${nodeName} (${params.operation}): executed successfully`, e.message)
+      }
+    }
+
+    // 5d: Clean up the imported workflow
+    try {
+      await n8nFetch(auth, `/rest/workflows/${imported.id}`, { method: 'DELETE' })
+      importedWorkflowIds.splice(importedWorkflowIds.indexOf(imported.id), 1)
+    } catch {}
+
+    console.log()
+  }
+
+  // Cleanup any that failed mid-way
+  for (const id of importedWorkflowIds) {
+    try { await n8nFetch(auth, `/rest/workflows/${id}`, { method: 'DELETE' }) } catch {}
+  }
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -792,6 +935,21 @@ async function main() {
     }
   } else if (!INTERNAL_API_SECRET) {
     console.log('⚠  INTERNAL_API_SECRET not set — skipping Phase 4 (analytics validation)\n')
+  }
+
+  // Phase 5: Template validation (requires API key + n8n credential from phase 2)
+  if (RETAINR_API_KEY) {
+    try {
+      // Re-create credential for phase 5 (phase 2 credential may have been cleaned up)
+      const tmplCredential = await createCredential(auth)
+      if (tmplCredential) {
+        await phase5TemplateValidation(auth, tmplCredential, registeredNodeType)
+      } else {
+        console.log('⚠  Could not create credential — skipping Phase 5 (template validation)\n')
+      }
+    } catch (e) {
+      console.error(`Phase 5 FAILED: ${e.message}\n`)
+    }
   }
 
   // Summary
