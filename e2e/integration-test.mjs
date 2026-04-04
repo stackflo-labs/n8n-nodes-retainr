@@ -860,6 +860,12 @@ async function phase5TemplateValidation(auth, credential, nodeType) {
         if (params.operation === 'search' && output?.results !== undefined) {
           pass(`${label} / ${nodeName}: returned ${output.results?.length ?? 0} results`)
         }
+        if (params.operation === 'getContext' && output?.context !== undefined) {
+          pass(`${label} / ${nodeName}: returned context string (memories_used=${output.memories_used ?? 0})`)
+        }
+        if (params.operation === 'list' && output?.memories !== undefined) {
+          pass(`${label} / ${nodeName}: returned ${output.memories?.length ?? 0} memories (total=${output.total ?? 0})`)
+        }
       } catch (e) {
         fail(`${label} / ${nodeName} (${params.operation}): executed successfully`, e.message)
       }
