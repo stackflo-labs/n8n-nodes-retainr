@@ -571,8 +571,8 @@ async function phase3DirectApi() {
     body: JSON.stringify({ namespace }),
   })
   assert(deleteRes.ok, 'Delete API returns 2xx', `got ${deleteRes.status}`)
-  const deleteData = await deleteRes.json()
-  pass(`Deleted ${deleteData.deleted ?? '?'} memories`)
+  // DELETE returns 204 No Content — no JSON body to parse
+  pass('Memories deleted (204 No Content)')
 
   // Verify deletion
   const verifyRes = await retainrFetch(`/v1/memories?namespace=${encodeURIComponent(namespace)}&limit=10`)
